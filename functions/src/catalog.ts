@@ -1,0 +1,82 @@
+import { Timestamp } from "firebase-admin/firestore";
+import { HttpsError } from "firebase-functions/v2/https";
+import { bool, callable, db, docId, int, loadActor, obj, oneOf, optStr, phone, str, writeAudit } from "./util";
+
+// ---------- المتاجر (المدير) ----------
+export const adminUpsertStore = callable(async (req) => {
+  const d = obj(req.data);
+  const storeId = d.storeId ? docId(d.storeId, "storeId") : null;
+  const data = {
+    name: str(d.name, "name", 2, 80),
+    category: oneOf(d.category, "category", ["grocery", "pharmacy", "other"] as const),
+    phone: phone(d.phone),
+    address: optStr(d.address, "address", 200),
+    status: oneOf(d.status, "status", ["active", "suspended"] as const),
+    isOpen: bool(d.isOpen, "isOpen"),
+  };
+  return db.runTransaction(async (tx) => {
+    const actor = await loadActor(req, ["admin"], tx);
+    const ref = storeId ? db.doc(`stores/${storeId}`) : db.collection("stores").doc();
+    const snap = await tx.get(ref);
+    if (storeId && !snap.exists) throw new HttpsError("not-found", "store_not_found");
+    const now = Timestamp.now();
+    if (snap.exists) tx.update(ref, { ...data, updatedAt: now });
+    else tx.set(ref, { ...data, createdAt: now, updatedAt: now });
+    writeAudit(tx, actor, snap.exists ? "update_store" : "create_store", "store", ref.id, data);
+    return { storeId: ref.id };
+  });
+});
+
+// ---------- المنتجات (التاجر لمتجره، أو المدير) ----------
+export const upsertProduct = callable(async (req) => {
+  const d = obj(req.data);
+  const productId = d.productId ? docId(d.productId, "productId") : null;
+  const data = {
+    name: str(d.name, "name", 2, 100),
+    description: optStr(d.description, "description", 500),
+    category: optStr(d.category, "category", 60),
+    price: int(d.price, "price", 0, 10_000_000),
+    // null = كمية غير مُتتبَّعة
+    stockQty: d.stockQty === null || d.stockQty === undefined ? null : int(d.stockQty, "stockQty", 0, 1_000_000),
+    isAvailable: bool(d.isAvailable, "isAvailable"),
+    imagePath: optStr(d.imagePath, "imagePath", 300),
+  };
+
+  return db.runTransaction(async (tx) => {
+    const actor = await loadActor(req, ["merchant", "admin"], tx);
+    const storeId = actor.role === "merchant" ? actor.storeId : docId(d.storeId, "storeId");
+    if (!storeId) throw new HttpsError("failed-precondition", "no_store");
+    const storeSnap = await tx.get(db.doc(`stores/${storeId}`));
+    if (!storeSnap.exists || (actor.role === "merchant" && storeSnap.get("status") !== "active"))
+      throw new HttpsError("failed-precondition", "store_unavailable");
+    if (data.imagePath && !data.imagePath.startsWith(`products/${storeId}/`)) throw new HttpsError("invalid-argument", "invalid_imagePath");
+
+    const ref = productId ? db.doc(`products/${productId}`) : db.collection("products").doc();
+    const snap = await tx.get(ref);
+    if (productId && (!snap.exists || snap.get("storeId") !== storeId)) throw new HttpsError("not-found", "product_not_found");
+    const now = Timestamp.now();
+    if (snap.exists) tx.update(ref, { ...data, updatedAt: now });
+    else tx.set(ref, { ...data, storeId, createdAt: now, updatedAt: now });
+    writeAudit(tx, actor, snap.exists ? "update_product" : "create_product", "product", ref.id, {
+      storeId, oldPrice: snap.exists ? snap.get("price") : null, newPrice: data.price,
+    });
+    return { productId: ref.id };
+  });
+});
+
+export const setStoreOpen = callable(async (req) => {
+  const d = obj(req.data);
+  const isOpen = bool(d.isOpen, "isOpen");
+  return db.runTransaction(async (tx) => {
+    const actor = await loadActor(req, ["merchant", "admin"], tx);
+    const storeId = actor.role === "merchant" ? actor.storeId : docId(d.storeId, "storeId");
+    if (!storeId) throw new HttpsError("failed-precondition", "no_store");
+    const ref = db.doc(`stores/${storeId}`);
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "store_not_found");
+    if (actor.role === "merchant" && snap.get("status") !== "active") throw new HttpsError("permission-denied", "store_suspended");
+    tx.update(ref, { isOpen, updatedAt: Timestamp.now() });
+    writeAudit(tx, actor, "set_store_open", "store", storeId, { isOpen });
+    return { ok: true };
+  });
+});

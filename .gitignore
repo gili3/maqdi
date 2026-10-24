@@ -1,0 +1,8 @@
+node_modules/
+lib/
+*.log
+.firebase/
+local.properties
+*.jks
+*.keystore
+service-account*.json

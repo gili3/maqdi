@@ -1,0 +1,31 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function profile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+    function canManage(storeId) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && profile().status == 'active'
+        && (profile().role == 'admin'
+            || (profile().role == 'merchant' && profile().storeId == storeId));
+    }
+    function smallImage() {
+      return request.resource.size < 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // صور المنتجات: products/{storeId}/{productId}/{file}
+    match /products/{storeId}/{productId}/{file} {
+      allow read: if request.auth != null;
+      allow create, update: if canManage(storeId) && smallImage();
+      allow delete: if canManage(storeId);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

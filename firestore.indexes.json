@@ -1,0 +1,23 @@
+{
+  "indexes": [
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "customerId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "expiresAt", "order": "ASCENDING" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "settlementStatus", "order": "ASCENDING" }, { "fieldPath": "deliveredAt", "order": "ASCENDING" } ] },
+    { "collectionGroup": "financial_entries", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" } ] },
+    { "collectionGroup": "financial_entries", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "ledger", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "financial_entries", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "ledger", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" } ] }
+  ],
+  "fieldOverrides": []
+}

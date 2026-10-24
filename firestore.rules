@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- دوال مساعدة ----------
+    function signedIn() { return request.auth != null; }
+    function profilePath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function hasProfile() { return signedIn() && exists(profilePath()); }
+    function me() { return get(profilePath()).data; }
+    function isActive() { return hasProfile() && me().status == 'active'; }
+    function isAdmin() { return isActive() && me().role == 'admin'; }
+    function isCourier() { return isActive() && me().role == 'courier'; }
+    function isMerchantOf(storeId) {
+      return isActive() && me().role == 'merchant' && me().storeId == storeId;
+    }
+
+    // ---------- المستخدمون ----------
+    // الإنشاء والدور والحالة من الخادم فقط. المستخدم يعدّل بياناته الشخصية فقط.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow update: if isActive() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['name', 'phone', 'savedAddress', 'fcmTokens', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80
+        && (request.resource.data.phone == null
+            || (request.resource.data.phone is string && request.resource.data.phone.size() <= 20))
+        && request.resource.data.fcmTokens is list && request.resource.data.fcmTokens.size() <= 10;
+      allow create, delete: if false;
+    }
+
+    // ---------- المتاجر والمنتجات: قراءة فقط ----------
+    match /stores/{storeId} {
+      allow read: if isActive();
+      allow write: if false;
+    }
+    match /products/{productId} {
+      allow read: if isActive();
+      allow write: if false;
+    }
+
+    // ---------- الإعدادات: قراءة فقط ----------
+    match /settings/{doc} {
+      allow read: if isActive();
+      allow write: if false;
+    }
+
+    // ---------- الطلبات: قراءة فقط (الكتابة عبر Cloud Functions) ----------
+    match /orders/{orderId} {
+      allow read: if isActive() && (
+        resource.data.customerId == request.auth.uid
+        || isMerchantOf(resource.data.storeId)
+        || isAdmin()
+        || (isCourier() && resource.data.status in ['ready_for_pickup', 'out_for_delivery'])
+        || (isCourier() && resource.data.get('courierUid', '') == request.auth.uid)
+      );
+      allow write: if false;
+
+      match /history/{eventId} {
+        allow read: if isActive() && (
+          isAdmin()
+          || get(/databases/$(database)/documents/orders/$(orderId)).data.customerId == request.auth.uid
+          || isMerchantOf(get(/databases/$(database)/documents/orders/$(orderId)).data.storeId)
+        );
+        allow write: if false;
+      }
+    }
+
+    // ---------- المالية ----------
+    match /financial_entries/{entryId} {
+      allow read: if isAdmin()
+        || (isMerchantOf(resource.data.storeId) && resource.data.ledger == 'store_payable');
+      allow write: if false;
+    }
+    match /store_balances/{storeId} {
+      allow read: if isAdmin() || isMerchantOf(storeId);
+      allow write: if false;
+    }
+    match /store_settlements/{id} {
+      allow read: if isAdmin() || isMerchantOf(resource.data.storeId);
+      allow write: if false;
+    }
+    match /expenses/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /invites/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // أي شيء آخر (مثل idempotency) مغلق تمامًا
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -2,7 +2,7 @@
   "name": "maqdi-functions",
   "private": true,
   "main": "lib/index.js",
-  "engines": { "node": "20" },
+  "engines": { "node": "22" },
   "scripts": {
     "build": "tsc",
     "test": "tsc && node --test"
@@ -12,7 +12,7 @@
     "firebase-functions": "^6.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
   }
 }

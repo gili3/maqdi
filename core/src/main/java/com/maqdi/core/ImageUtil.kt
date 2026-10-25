@@ -47,4 +47,13 @@ object ImageUtil {
         FirebaseStorage.getInstance().reference.child(path).putBytes(bytes, meta).await()
         return path
     }
+
+    /** صورة غلاف المتجر (من الإدارة): stores/{storeId}/{id}/main.jpg */
+    suspend fun uploadStoreImage(ctx: Context, storeId: String, uri: Uri): String {
+        val bytes = compress(ctx, uri)
+        val path = "stores/$storeId/${UUID.randomUUID()}/main.jpg"
+        val meta = StorageMetadata.Builder().setContentType("image/jpeg").build()
+        FirebaseStorage.getInstance().reference.child(path).putBytes(bytes, meta).await()
+        return path
+    }
 }

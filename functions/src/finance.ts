@@ -68,7 +68,7 @@ export const adminRecordSettlement = callable(async (req) => {
   const settlementId = `${storeId}_${key}`;
 
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["admin"], tx);
+    const actor = await loadActor(req, ["admin"], tx, { admin: "finance" });
     const setRef = db.doc(`store_settlements/${settlementId}`);
     const balRef = db.doc(`store_balances/${storeId}`);
     const storeRef = db.doc(`stores/${storeId}`);
@@ -130,7 +130,7 @@ export const adminCorrectEntry = callable(async (req) => {
     : int(d.replacementAmount, "replacementAmount", -1_000_000_000, 1_000_000_000);
 
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["admin"], tx);
+    const actor = await loadActor(req, ["admin"], tx, { admin: "finance" });
     const origRef = db.doc(`financial_entries/${entryId}`);
     const revRef = db.doc(`financial_entries/${entryId}__rev`);
     const [origSnap, revSnap] = await tx.getAll(origRef, revRef);
@@ -199,7 +199,7 @@ export const adminAddExpense = callable(async (req) => {
   const note = optStr(d.note, "note", 300);
   const key = submissionKey(d.expenseKey, "expenseKey");
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["admin"], tx);
+    const actor = await loadActor(req, ["admin"], tx, { admin: "expenses" });
     const ref = db.doc(`expenses/${key}`);
     const snap = await tx.get(ref);
     if (snap.exists) return { expenseId: key, duplicate: true };
@@ -223,7 +223,7 @@ export const adminExportFinancialCsv = callable(async (req) => {
   const to = new Date(str(d.to, "to", 8, 40));
   if (isNaN(from.getTime()) || isNaN(to.getTime()) || to <= from) throw new HttpsError("invalid-argument", "invalid_range");
   const storeId = d.storeId ? docId(d.storeId, "storeId") : null;
-  await loadActor(req, ["admin"]);
+  await loadActor(req, ["admin"], undefined, { admin: "finance" });
 
   let q: Query = db.collection("financial_entries");
   if (storeId) q = q.where("storeId", "==", storeId);
@@ -250,7 +250,7 @@ export const adminFinanceSummary = callable(async (req) => {
   const from = new Date(str(d.from, "from", 8, 40));
   const to = new Date(str(d.to, "to", 8, 40));
   if (isNaN(from.getTime()) || isNaN(to.getTime()) || to <= from) throw new HttpsError("invalid-argument", "invalid_range");
-  await loadActor(req, ["admin"]);
+  await loadActor(req, ["admin"], undefined, { admin: "finance" });
   const f = Timestamp.fromDate(from);
   const t = Timestamp.fromDate(to);
 
@@ -273,7 +273,7 @@ export const adminFinanceSummary = callable(async (req) => {
 
 // ---------- لوحة الإحصائيات ----------
 export const adminDashboard = callable(async (req) => {
-  await loadActor(req, ["admin"]);
+  await loadActor(req, ["admin"], undefined, { admin: "reports" });
   const now = Date.now();
   const startLocal = Math.floor((now + LOCAL_OFFSET_MS) / 86_400_000) * 86_400_000 - LOCAL_OFFSET_MS;
   const startTs = Timestamp.fromMillis(startLocal);

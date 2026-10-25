@@ -5,12 +5,19 @@ import com.google.firebase.firestore.DocumentSnapshot
 data class Profile(
     val uid: String, val email: String, val name: String, val phone: String?, val role: String,
     val storeId: String?, val status: String, val savedAddress: String?, val isTestAccount: Boolean,
-)
+    /** null = كل صلاحيات الدور (الافتراضي) */
+    val permissions: List<String>? = null,
+) {
+    /** هل يملك هذا الحساب الصلاحية؟ الزبون بلا صلاحيات إدارية */
+    fun can(p: String): Boolean = Permissions.has(role, permissions, p)
+}
 
 data class Store(
     val id: String, val name: String, val category: String, val phone: String,
-    val address: String?, val status: String, val isOpen: Boolean,
+    val address: String?, val status: String, val isOpen: Boolean, val imagePath: String? = null,
 )
+
+data class Category(val id: String, val name: String, val order: Long, val isActive: Boolean)
 
 data class Product(
     val id: String, val storeId: String, val name: String, val description: String?,
@@ -66,12 +73,16 @@ data class Expense(val id: String, val amount: Long, val category: String, val n
 
 data class UserRow(
     val uid: String, val email: String, val name: String, val role: String, val status: String,
-    val storeId: String?, val isTestAccount: Boolean,
+    val storeId: String?, val isTestAccount: Boolean, val permissions: List<String>? = null,
 )
 
 // ---------- التحويل من Firestore ----------
 private fun DocumentSnapshot.lng(f: String): Long = getLong(f) ?: 0L
 private fun DocumentSnapshot.time(f: String): Long? = getTimestamp(f)?.toDate()?.time
+
+/** قائمة نصوص من حقل؛ null إن كان الحقل غائبًا أو null (يعني: الافتراضي) */
+private fun DocumentSnapshot.strList(f: String): List<String>? =
+    (get(f) as? List<*>)?.filterIsInstance<String>()
 
 private fun num(v: Any?): Long = (v as? Number)?.toLong() ?: 0L
 
@@ -98,12 +109,17 @@ fun DocumentSnapshot.toProfile() = Profile(
     uid = id, email = getString("email") ?: "", name = getString("name") ?: "", phone = getString("phone"),
     role = getString("role") ?: "customer", storeId = getString("storeId"), status = getString("status") ?: "active",
     savedAddress = getString("savedAddress"), isTestAccount = getBoolean("isTestAccount") ?: false,
+    permissions = strList("permissions"),
 )
 
 fun DocumentSnapshot.toStore() = Store(
     id = id, name = getString("name") ?: "", category = getString("category") ?: "other",
     phone = getString("phone") ?: "", address = getString("address"),
-    status = getString("status") ?: "active", isOpen = getBoolean("isOpen") ?: false,
+    status = getString("status") ?: "active", isOpen = getBoolean("isOpen") ?: false, imagePath = getString("imagePath"),
+)
+
+fun DocumentSnapshot.toCategory() = Category(
+    id = id, name = getString("name") ?: "", order = getLong("order") ?: 0L, isActive = getBoolean("isActive") ?: true,
 )
 
 fun DocumentSnapshot.toProduct() = Product(
@@ -163,4 +179,5 @@ fun DocumentSnapshot.toExpense() = Expense(
 fun DocumentSnapshot.toUserRow() = UserRow(
     uid = id, email = getString("email") ?: "", name = getString("name") ?: "", role = getString("role") ?: "",
     status = getString("status") ?: "", storeId = getString("storeId"), isTestAccount = getBoolean("isTestAccount") ?: false,
+    permissions = strList("permissions"),
 )

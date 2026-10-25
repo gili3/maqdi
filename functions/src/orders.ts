@@ -3,6 +3,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { OPEN_STATUSES, Status } from "./config";
 import { addEntry, bumpBalance } from "./finance";
 import { canTransition } from "./stateMachine";
+import { permissionForStatusChange } from "./permissions";
 import { evaluateStatusChange, GuardOrder } from "./orderGuards";
 import {
   Actor, arr, callable, db, docId, int, loadActor, obj, oneOf, optStr, phone, readSettings, str,
@@ -132,7 +133,7 @@ export const proposeOrder = callable(async (req) => {
   if (new Set(rawItems.map((i) => i.productId)).size !== rawItems.length) throw new HttpsError("invalid-argument", "duplicate_items");
 
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["merchant", "admin"], tx);
+    const actor = await loadActor(req, ["merchant", "admin"], tx, { merchant: "orders", admin: "orders" });
     const ref = db.doc(`orders/${orderId}`);
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError("not-found", "order_not_found");
@@ -237,6 +238,8 @@ export const changeOrderStatus = callable(async (req) => {
 
   return db.runTransaction(async (tx) => {
     const actor = await loadActor(req, undefined, tx);
+    const needed = permissionForStatusChange(actor.role, to);
+    if (needed && !actor.permissions.includes(needed)) throw new HttpsError("permission-denied", "permission_denied");
     const ref = db.doc(`orders/${orderId}`);
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError("not-found", "order_not_found");

@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,16 @@ val LocalOpenNotifications = staticCompositionLocalOf<(() -> Unit)?> { null }
 fun AppShell(profile: Profile, onOpenOrder: (String) -> Unit, content: @Composable () -> Unit) {
     var show by remember { mutableStateOf(false) }
     BackHandler(enabled = show) { show = false }
+    // أسماء الفئات المخصّصة من الإدارة (تتحدّث حيًّا)
+    LaunchedEffect(Unit) {
+        try {
+            Repo.categories().collect { CategoryNames.update(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // تبقى الفئات الافتراضية إن تعذّرت القراءة
+        }
+    }
     CompositionLocalProvider(LocalProfile provides profile, LocalOpenNotifications provides { show = true }) {
         Box(Modifier.fillMaxSize()) {
             content()

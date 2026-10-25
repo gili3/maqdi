@@ -12,6 +12,13 @@ service firebase.storage {
         && (profile().role == 'admin'
             || (profile().role == 'merchant' && profile().storeId == storeId));
     }
+    function canManageStores() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && profile().status == 'active'
+        && profile().role == 'admin'
+        && (profile().get('permissions', null) == null || 'stores' in profile().permissions);
+    }
     function smallImage() {
       return request.resource.size < 1024 * 1024
         && request.resource.contentType.matches('image/.*');
@@ -22,6 +29,13 @@ service firebase.storage {
       allow read: if request.auth != null;
       allow create, update: if canManage(storeId) && smallImage();
       allow delete: if canManage(storeId);
+    }
+
+    // صور المتاجر: stores/{storeId}/{imageId}/{file} — الرفع من الإدارة فقط
+    match /stores/{storeId}/{imageId}/{file} {
+      allow read: if request.auth != null;
+      allow create, update: if canManageStores() && smallImage();
+      allow delete: if canManageStores();
     }
 
     match /{allPaths=**} {

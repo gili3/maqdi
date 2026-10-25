@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { validatePermissionList } from "./permissions";
 import { callable, db, email, int, bool, obj, oneOf, optStr, str, docId, loadActor, writeAudit } from "./util";
 
 // تُستدعى بعد أول تسجيل دخول بـ Google لإنشاء الملف الشخصي.
@@ -39,7 +40,7 @@ export const adminInviteUser = callable(async (req) => {
   const storeId = role === "merchant" ? docId(d.storeId, "storeId") : null;
 
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["admin"], tx);
+    const actor = await loadActor(req, ["admin"], tx, { admin: "users" });
     if (storeId) {
       const s = await tx.get(db.doc(`stores/${storeId}`));
       if (!s.exists) throw new HttpsError("not-found", "store_not_found");
@@ -47,7 +48,9 @@ export const adminInviteUser = callable(async (req) => {
     const existing = await tx.get(db.collection("users").where("email", "==", mail).limit(1));
     const now = Timestamp.now();
     if (!existing.empty) {
-      tx.update(existing.docs[0].ref, { role, storeId, updatedAt: now });
+      // تغيير الدور يعيد الصلاحيات للافتراضي (كل صلاحيات الدور الجديد)
+      const sameRole = existing.docs[0].get("role") === role;
+      tx.update(existing.docs[0].ref, { role, storeId, ...(sameRole ? {} : { permissions: null }), updatedAt: now });
     } else {
       tx.set(db.doc(`invites/${mail}`), { role, storeId, used: false, createdBy: actor.uid, createdAt: now });
     }
@@ -64,7 +67,7 @@ export const adminSetUserStatus = callable(async (req) => {
   if (status === null && isTest === null) throw new HttpsError("invalid-argument", "nothing_to_change");
 
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["admin"], tx);
+    const actor = await loadActor(req, ["admin"], tx, { admin: "users" });
     if (uid === actor.uid && status === "suspended") throw new HttpsError("failed-precondition", "cannot_suspend_self");
     const ref = db.doc(`users/${uid}`);
     const snap = await tx.get(ref);
@@ -89,11 +92,37 @@ export const adminUpdateSettings = callable(async (req) => {
   };
   if (d.maxOpenOrders !== undefined) patch.maxOpenOrders = int(d.maxOpenOrders, "maxOpenOrders", 1, 20);
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["admin"], tx);
+    const actor = await loadActor(req, ["admin"], tx, { admin: "settings" });
     const ref = db.doc("settings/app");
     const old = await tx.get(ref);
     tx.set(ref, patch, { merge: true });
     writeAudit(tx, actor, "update_settings", "settings", "app", { old: old.data() ?? null, new: patch });
+    return { ok: true };
+  });
+});
+
+// ---------- تخصيص صلاحيات مستخدم (المدير الذي يملك صلاحية "permissions") ----------
+// permissions = null يعيد الصلاحيات الافتراضية (كل صلاحيات الدور).
+export const adminSetUserPermissions = callable(async (req) => {
+  const d = obj(req.data);
+  const uid = str(d.uid, "uid", 5, 128);
+  const raw = d.permissions;
+  return db.runTransaction(async (tx) => {
+    const actor = await loadActor(req, ["admin"], tx, { admin: "permissions" });
+    const ref = db.doc(`users/${uid}`);
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "user_not_found");
+    const role = String(snap.get("role"));
+    if (role === "customer") throw new HttpsError("failed-precondition", "role_has_no_permissions");
+    let list: string[] | null = null;
+    if (raw !== null) {
+      list = validatePermissionList(role, raw);
+      if (list === null) throw new HttpsError("invalid-argument", "invalid_permissions");
+    }
+    // منع المدير من سحب صلاحية إدارة الصلاحيات من نفسه (يقفل نفسه خارج اللوحة)
+    if (uid === actor.uid && list !== null && !list.includes("permissions")) throw new HttpsError("failed-precondition", "cannot_remove_own_permissions");
+    tx.update(ref, { permissions: list, updatedAt: Timestamp.now() });
+    writeAudit(tx, actor, "set_user_permissions", "user", uid, { role, permissions: list });
     return { ok: true };
   });
 });

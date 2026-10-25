@@ -58,6 +58,20 @@ import com.maqdi.core.Settings
 import com.maqdi.core.St
 import com.maqdi.core.Store
 import com.maqdi.core.categoryLabel
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Checkbox
+import androidx.compose.ui.draw.clip
+import com.maqdi.core.Category
+import com.maqdi.core.CategoryNames
+import com.maqdi.core.ImageUtil
+import com.maqdi.core.Permissions
+import com.maqdi.core.StorageImage
+import com.maqdi.core.UserRow
 import com.maqdi.core.dateTime
 import com.maqdi.core.dayStartMs
 import com.maqdi.core.entryTypeLabel
@@ -269,14 +283,15 @@ fun AdminMoreScreen(profile: Profile, onNav: (String) -> Unit) {
     Screen("الإدارة") { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(
-                "a_reports" to "التقارير والإحصاءات",
-                "a_stores" to "المتاجر والتجار والمنتجات",
-                "a_users" to "المستخدمون والموصّلون",
-                "a_settings" to "رسوم التوصيل والمُهَل",
-                "a_expenses" to "المصروفات",
-                "a_export" to "ملخص مالي وتصدير (CSV)",
-                "a_audit" to "سجل التدقيق",
-            ).forEach { (r, t) -> ActionButton(t, tonal = true) { onNav(r) } }
+                Triple("a_reports", "التقارير والإحصاءات", profile.can("reports")),
+                Triple("a_stores", "المتاجر والتجار والمنتجات", profile.can("stores")),
+                Triple("a_categories", "فئات المتاجر", profile.can("categories")),
+                Triple("a_users", "المستخدمون والصلاحيات", profile.can("users") || profile.can("permissions")),
+                Triple("a_settings", "رسوم التوصيل والمُهَل", profile.can("settings")),
+                Triple("a_expenses", "المصروفات", profile.can("expenses")),
+                Triple("a_export", "ملخص مالي وتصدير (CSV)", profile.can("finance")),
+                Triple("a_audit", "سجل التدقيق", profile.can("audit")),
+            ).filter { it.third }.forEach { (r, t, _) -> ActionButton(t, tonal = true) { onNav(r) } }
             Text(profile.email, color = Mq.Muted, modifier = Modifier.padding(top = 12.dp))
             ActionButton("تسجيل الخروج", destructive = true) { signOutAll(activity) }
         }
@@ -303,12 +318,16 @@ fun AdminStoresScreen(onBack: () -> Unit, onProducts: (String) -> Unit) {
                 else LazyColumn {
                     items(list.sortedBy { it.name }, key = { it.id }) { s ->
                         MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clickable { editing = s }) {
-                            Column(Modifier.padding(14.dp)) {
-                                Text(s.name, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    categoryLabel(s.category) + " • " + (if (s.status == "active") "نشط" else "موقوف") + " • " + (if (s.isOpen) "مفتوح" else "مغلق"),
-                                    color = Mq.Muted,
-                                )
+                            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                StorageImage(s.imagePath, Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)))
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(s.name, style = MaterialTheme.typography.titleMedium)
+                                    Text(
+                                        categoryLabel(s.category) + " • " + (if (s.status == "active") "نشط" else "موقوف") + " • " + (if (s.isOpen) "مفتوح" else "مغلق"),
+                                        color = Mq.Muted,
+                                    )
+                                }
                             }
                         }
                     }
@@ -320,22 +339,40 @@ fun AdminStoresScreen(onBack: () -> Unit, onProducts: (String) -> Unit) {
 
 @Composable
 private fun StoreEditor(s: Store?, onClose: () -> Unit, onProducts: (String) -> Unit) {
+    val ctx = LocalContext.current
     var name by remember { mutableStateOf(s?.name ?: "") }
     var phone by remember { mutableStateOf(s?.phone ?: "") }
     var address by remember { mutableStateOf(s?.address ?: "") }
-    var category by remember { mutableStateOf(s?.category ?: "grocery") }
+    val options = CategoryNames.options().map { it.id to it.name }.toMutableList()
+    // فئة المتجر الحالية قد تكون معطّلة: تبقى ظاهرة ليتمكن المدير من رؤيتها
+    if (s != null && options.none { it.first == s.category }) options.add(s.category to categoryLabel(s.category))
+    var category by remember { mutableStateOf(s?.category ?: options.firstOrNull()?.first ?: "grocery") }
     var active by remember { mutableStateOf((s?.status ?: "active") == "active") }
     var open by remember { mutableStateOf(s?.isOpen ?: true) }
     var email by remember { mutableStateOf("") }
     var invited by remember { mutableStateOf(false) }
+    var pendingImage by remember { mutableStateOf<android.net.Uri?>(null) }
+    // بعد أول حفظ ناجح لمتجر جديد نتذكر معرّفه حتى لا يتكرر الإنشاء عند إعادة المحاولة
+    var createdId by remember { mutableStateOf<String?>(null) }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) pendingImage = uri }
+    val storeId = s?.id ?: createdId
 
     Screen(if (s == null) "متجر جديد" else "تعديل المتجر", onBack = onClose) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+            Section("صورة المتجر") {
+                StorageImage(s?.imagePath, Modifier.size(120.dp).clip(RoundedCornerShape(12.dp)))
+                ActionButton(
+                    if (pendingImage != null) "تغيير الصورة المختارة" else "اختيار صورة للمتجر",
+                    Modifier.fillMaxWidth().padding(top = 8.dp), tonal = true,
+                ) { pick.launch("image/*") }
+                if (pendingImage != null) Text("تم اختيار صورة جديدة. تُرفع عند الضغط على «حفظ».", color = Mq.Green)
+                Text("تُصغَّر الصورة وتُضغط تلقائيًا. تظهر للزبائن في قائمة المتاجر.", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+            }
             Section("بيانات المتجر") {
                 Field("اسم المتجر", name, { name = it })
                 Field("هاتف المتجر", phone, { phone = it }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Phone)
                 Field("العنوان (اختياري)", address, { address = it }, Modifier.fillMaxWidth().padding(top = 8.dp))
-                ChipRow(listOf("grocery" to "بقالة", "pharmacy" to "صيدلية", "other" to "أخرى"), category) { category = it }
+                ChipRow(options, category) { category = it }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("المتجر نشط"); Switch(checked = active, onCheckedChange = { active = it })
                 }
@@ -347,16 +384,24 @@ private fun StoreEditor(s: Store?, onClose: () -> Unit, onProducts: (String) -> 
                 "حفظ", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 enabled = name.trim().length >= 2 && phone.trim().length >= 6,
             ) {
-                Api.adminUpsertStore(s?.id, name.trim(), category, phone.trim(), address.trim().ifBlank { null }, if (active) "active" else "suspended", open)
+                val status = if (active) "active" else "suspended"
+                val id = Api.adminUpsertStore(storeId, name.trim(), category, phone.trim(), address.trim().ifBlank { null }, status, open)
+                if (s == null) createdId = id
+                val img = pendingImage
+                if (img != null) {
+                    val path = ImageUtil.uploadStoreImage(ctx, id, img)
+                    Api.adminUpsertStore(id, name.trim(), category, phone.trim(), address.trim().ifBlank { null }, status, open, imagePath = path)
+                    pendingImage = null
+                }
                 onClose()
             }
-            if (s != null) {
-                ActionButton("منتجات هذا المتجر", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true) { onProducts(s.id) }
+            if (storeId != null) {
+                ActionButton("منتجات هذا المتجر", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true) { onProducts(storeId) }
                 Section("دعوة تاجر لهذا المتجر") {
                     Text("اكتب بريد Gmail الخاص بالتاجر. عند أول دخول له بهذا البريد يصبح تاجرًا لهذا المتجر.", color = Mq.Muted)
                     Field("بريد التاجر", email, { email = it; invited = false }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Email)
                     ActionButton("إرسال الدعوة", Modifier.fillMaxWidth().padding(top = 8.dp), enabled = email.contains("@")) {
-                        Api.adminInvite(email.trim().lowercase(), "merchant", s.id)
+                        Api.adminInvite(email.trim().lowercase(), "merchant", storeId)
                         invited = true
                     }
                     if (invited) Text("تم تسجيل الدعوة.", color = Mq.Green)
@@ -366,6 +411,80 @@ private fun StoreEditor(s: Store?, onClose: () -> Unit, onProducts: (String) -> 
     }
 }
 
+// ---------- فئات المتاجر ----------
+@Composable
+fun AdminCategoriesScreen(onBack: () -> Unit) {
+    val cats = rememberLoadable { Repo.categories() }
+    var editing by remember { mutableStateOf<Category?>(null) }
+    var creating by remember { mutableStateOf(false) }
+
+    Screen("فئات المتاجر", onBack = onBack, floating = {
+        FloatingActionButton(onClick = { creating = true }) { Icon(Icons.Default.Add, contentDescription = "فئة جديدة") }
+    }) { pad ->
+        Column(Modifier.padding(pad)) {
+            LoadableView(cats) { list ->
+                LazyColumn {
+                    if (list.isEmpty()) {
+                        item {
+                            Section("الفئات الافتراضية") {
+                                Text("لم تُنشئ فئات بعد، فيعرض التطبيق: بقالة، صيدلية، أخرى. اضغط لإنشائها هنا لتعدّلها أو ترتّبها أو تضيف غيرها.", color = Mq.Muted)
+                                ActionButton("إنشاء الفئات الافتراضية", Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                    Api.adminUpsertCategory("grocery", "بقالة", 1, true)
+                                    Api.adminUpsertCategory("pharmacy", "صيدلية", 2, true)
+                                    Api.adminUpsertCategory("other", "أخرى", 3, true)
+                                }
+                            }
+                        }
+                    }
+                    items(list.sortedWith(compareBy({ it.order }, { it.name })), key = { it.id }) { c ->
+                        MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clickable { editing = c }) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text(c.name, style = MaterialTheme.typography.titleMedium)
+                                Text("الترتيب ${c.order} • " + (if (c.isActive) "ظاهرة للزبائن" else "مخفية"), color = Mq.Muted)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (creating) CategoryDialog(null, nextOrder = ((cats as? com.maqdi.core.Loadable.Data)?.value?.maxOfOrNull { it.order } ?: 0L) + 1) { creating = false }
+    editing?.let { c -> CategoryDialog(c, nextOrder = c.order) { editing = null } }
+}
+
+@Composable
+private fun CategoryDialog(c: Category?, nextOrder: Long, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf(c?.name ?: "") }
+    var order by remember { mutableStateOf(nextOrder.toString()) }
+    var active by remember { mutableStateOf(c?.isActive ?: true) }
+    val orderVal = order.trim().toLongOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (c == null) "فئة جديدة" else "تعديل الفئة") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Field("اسم الفئة (مثل: مخبوزات، ألبان، خضار)", name, { name = it })
+                Field("الترتيب (الأصغر أولًا)", order, { order = it.filter { ch -> ch.isDigit() } }, keyboard = KeyboardType.Number)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("ظاهرة للزبائن"); Switch(checked = active, onCheckedChange = { active = it })
+                }
+                ActionButton("حفظ", enabled = name.trim().length >= 2 && orderVal != null) {
+                    Api.adminUpsertCategory(c?.id, name.trim(), orderVal ?: 0L, active)
+                    onDismiss()
+                }
+                if (c != null) {
+                    ActionButton("حذف الفئة", destructive = true) {
+                        Api.adminDeleteCategory(c.id)
+                        onDismiss()
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+    )
+}
+
 // ---------- المستخدمون ----------
 @Composable
 fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
@@ -373,11 +492,16 @@ fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("courier") }
     var invited by remember { mutableStateOf(false) }
+    var permsFor by remember { mutableStateOf<UserRow?>(null) }
+    val canManageUsers = profile.can("users")
+    val canPerms = profile.can("permissions")
+
+    permsFor?.let { PermissionsDialog(it) { permsFor = null } }
 
     Screen("المستخدمون", onBack = onBack) { pad ->
         LoadableView(users) { list ->
             LazyColumn(Modifier.padding(pad)) {
-                item {
+                if (canManageUsers) item {
                     Section("دعوة موصّل أو مدير") {
                         Field("البريد (Gmail)", email, { email = it; invited = false }, keyboard = KeyboardType.Email)
                         ChipRow(listOf("courier" to "موصّل", "admin" to "مدير"), role) { role = it }
@@ -394,14 +518,24 @@ fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
                             Text(u.name.ifBlank { u.email }, style = MaterialTheme.typography.titleMedium)
                             Text(u.email, color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                             Text(roleLabel(u.role) + " • " + (if (u.status == "active") "نشط" else "موقوف") + (if (u.isTestAccount) " • تجريبي" else ""))
+                            if (u.role != "customer") {
+                                val all = Permissions.all(u.role)
+                                Text(
+                                    "الصلاحيات: " + (u.permissions?.let { p -> "مخصّصة (${p.count { it in all }} من ${all.size})" } ?: "كاملة (افتراضية)"),
+                                    color = Mq.Muted, style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                             if (u.uid != profile.uid) {
-                                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (canManageUsers) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     ActionButton(if (u.status == "active") "إيقاف" else "تفعيل", Modifier.weight(1f), tonal = true) {
                                         Api.adminSetUserStatus(u.uid, if (u.status == "active") "suspended" else "active", null)
                                     }
                                     ActionButton(if (u.isTestAccount) "إلغاء تجريبي" else "حساب تجريبي", Modifier.weight(1f), tonal = true) {
                                         Api.adminSetUserStatus(u.uid, null, !u.isTestAccount)
                                     }
+                                }
+                                if (canPerms && u.role != "customer") {
+                                    ActionButton("تخصيص الصلاحيات", Modifier.fillMaxWidth().padding(top = 8.dp), tonal = true) { permsFor = u }
                                 }
                             }
                         }
@@ -410,6 +544,42 @@ fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun PermissionsDialog(u: UserRow, onDismiss: () -> Unit) {
+    val items = Permissions.catalog[u.role].orEmpty()
+    val all = items.map { it.first }
+    var selected by remember { mutableStateOf((u.permissions ?: all).filter { it in all }.toSet()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("صلاحيات " + u.name.ifBlank { u.email } + " (" + roleLabel(u.role) + ")") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("ما لا تؤشّر عليه لن يستطيع هذا الحساب فعله أو رؤيته، حتى لو حاول من خارج التطبيق.", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+                items.forEach { (key, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { selected = if (key in selected) selected - key else selected + key },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = key in selected, onCheckedChange = { selected = if (it) selected + key else selected - key })
+                        Text(label)
+                    }
+                }
+                ActionButton("حفظ الصلاحيات", Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    // الاختيار الكامل = الافتراضي (يشمل أي صلاحية تُضاف مستقبلًا)
+                    Api.adminSetPermissions(u.uid, if (selected.containsAll(all)) null else all.filter { it in selected })
+                    onDismiss()
+                }
+                ActionButton("إرجاع الصلاحيات الكاملة", Modifier.fillMaxWidth().padding(top = 4.dp), tonal = true) {
+                    Api.adminSetPermissions(u.uid, null)
+                    onDismiss()
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+    )
 }
 
 // ---------- الإعدادات ----------

@@ -51,6 +51,8 @@ object Repo {
         emit(db.collection("products").whereEqualTo("isAvailable", true).limit(400).get().await().documents.map { it.toProduct() })
     }
 
+    fun categories() = db.collection("categories").listFlow { it.toCategory() }
+
     fun order(id: String) = db.document("orders/$id").docFlow { it.toOrder() }
     fun customerOrders(uid: String) =
         db.collection("orders").whereEqualTo("customerId", uid).orderBy("createdAt", desc).limit(100).listFlow { it.toOrder() }

@@ -9,6 +9,14 @@ service cloud.firestore {
     function me() { return get(profilePath()).data; }
     function isActive() { return hasProfile() && me().status == 'active'; }
     function isAdmin() { return isActive() && me().role == 'admin'; }
+    // صلاحية إدارية محددة: لا حقل permissions = كل الصلاحيات (السلوك القديم)
+    function can(p) {
+      return isAdmin() && (me().get('permissions', null) == null || p in me().permissions);
+    }
+    // صلاحية للتاجر/الموصّل (نفس منطق can لكن لأي دور)
+    function roleCan(p) {
+      return me().get('permissions', null) == null || p in me().permissions;
+    }
     function isCourier() { return isActive() && me().role == 'courier'; }
     function isMerchantOf(storeId) {
       return isActive() && me().role == 'merchant' && me().storeId == storeId;
@@ -17,7 +25,7 @@ service cloud.firestore {
     // ---------- المستخدمون ----------
     // الإنشاء والدور والحالة من الخادم فقط. المستخدم يعدّل بياناته الشخصية فقط.
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if signedIn() && (request.auth.uid == uid || can('users') || can('permissions'));
       allow update: if isActive() && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['name', 'phone', 'savedAddress', 'fcmTokens', 'updatedAt'])
@@ -47,6 +55,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---------- فئات المتاجر: قراءة فقط (الكتابة عبر Cloud Functions) ----------
+    match /categories/{id} {
+      allow read: if isActive();
+      allow write: if false;
+    }
+
     // ---------- الإعدادات: قراءة فقط ----------
     match /settings/{doc} {
       allow read: if isActive();
@@ -57,19 +71,19 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow read: if isActive() && (
         resource.data.customerId == request.auth.uid
-        || isMerchantOf(resource.data.storeId)
-        || isAdmin()
+        || (isMerchantOf(resource.data.storeId) && roleCan('orders'))
+        || can('orders') || can('deliveries')
         // الجاهزة للاستلام يراها كل موصّل؛ أما «في الطريق» فيراها الموصّل المستلِم فقط (السطر التالي)
-        || (isCourier() && resource.data.status == 'ready_for_pickup')
-        || (isCourier() && resource.data.get('courierUid', '') == request.auth.uid)
+        || (isCourier() && roleCan('deliveries') && resource.data.status == 'ready_for_pickup')
+        || (isCourier() && roleCan('deliveries') && resource.data.get('courierUid', '') == request.auth.uid)
       );
       allow write: if false;
 
       match /history/{eventId} {
         allow read: if isActive() && (
-          isAdmin()
+          can('orders')
           || get(/databases/$(database)/documents/orders/$(orderId)).data.customerId == request.auth.uid
-          || isMerchantOf(get(/databases/$(database)/documents/orders/$(orderId)).data.storeId)
+          || (isMerchantOf(get(/databases/$(database)/documents/orders/$(orderId)).data.storeId) && roleCan('orders'))
         );
         allow write: if false;
       }
@@ -77,28 +91,28 @@ service cloud.firestore {
 
     // ---------- المالية ----------
     match /financial_entries/{entryId} {
-      allow read: if isAdmin()
-        || (isMerchantOf(resource.data.storeId) && resource.data.ledger == 'store_payable');
+      allow read: if can('finance')
+        || (isMerchantOf(resource.data.storeId) && roleCan('balance') && resource.data.ledger == 'store_payable');
       allow write: if false;
     }
     match /store_balances/{storeId} {
-      allow read: if isAdmin() || isMerchantOf(storeId);
+      allow read: if can('finance') || (isMerchantOf(storeId) && roleCan('balance'));
       allow write: if false;
     }
     match /store_settlements/{id} {
-      allow read: if isAdmin() || isMerchantOf(resource.data.storeId);
+      allow read: if can('finance') || (isMerchantOf(resource.data.storeId) && roleCan('balance'));
       allow write: if false;
     }
     match /expenses/{id} {
-      allow read: if isAdmin();
+      allow read: if can('expenses');
       allow write: if false;
     }
     match /audit_logs/{id} {
-      allow read: if isAdmin();
+      allow read: if can('audit');
       allow write: if false;
     }
     match /invites/{id} {
-      allow read: if isAdmin();
+      allow read: if can('users');
       allow write: if false;
     }
 

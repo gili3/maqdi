@@ -23,18 +23,18 @@ import com.maqdi.core.Profile
 @Composable
 fun MerchantApp(profile: Profile) {
     val nav = rememberNavController()
-    val tabs = listOf(
-        Tab("m_orders", "الطلبات", Icons.AutoMirrored.Filled.ReceiptLong),
-        Tab("m_products", "المنتجات", Icons.Default.Inventory2),
-        Tab("m_reports", "التقارير", Icons.Default.Assessment),
+    val tabs = listOfNotNull(
+        if (profile.can("orders")) Tab("m_orders", "الطلبات", Icons.AutoMirrored.Filled.ReceiptLong) else null,
+        if (profile.can("products")) Tab("m_products", "المنتجات", Icons.Default.Inventory2) else null,
+        if (profile.can("reports")) Tab("m_reports", "التقارير", Icons.Default.Assessment) else null,
         Tab("m_account", "حسابي", Icons.Default.Storefront),
     )
     AppShell(profile, onOpenOrder = { nav.navigate("order/$it") }) {
-        TabScaffold(nav, tabs, "m_orders") {
+        TabScaffold(nav, tabs, tabs.first().route) {
             composable("m_orders") { MerchantOrdersScreen(profile, onOpen = { nav.navigate("order/$it") }) }
             composable("m_products") { MerchantProductsScreen(profile) }
             composable("m_reports") { ReportScreen("merchant", "تقارير المتجر") }
-            composable("m_account") { StoreAccountScreen(profile.storeId ?: "", profile.name) }
+            composable("m_account") { if (profile.can("balance")) StoreAccountScreen(profile.storeId ?: "", profile.name) else MeScreen(profile) }
             orderRoute(nav, profile)
         }
     }
@@ -44,14 +44,14 @@ fun MerchantApp(profile: Profile) {
 @Composable
 fun CourierApp(profile: Profile) {
     val nav = rememberNavController()
-    val tabs = listOf(
-        Tab("c_deliveries", "التوصيل", Icons.Default.LocalShipping),
-        Tab("c_history", "سجلي", Icons.Default.History),
-        Tab("c_reports", "التقارير", Icons.Default.Assessment),
+    val tabs = listOfNotNull(
+        if (profile.can("deliveries")) Tab("c_deliveries", "التوصيل", Icons.Default.LocalShipping) else null,
+        if (profile.can("deliveries")) Tab("c_history", "سجلي", Icons.Default.History) else null,
+        if (profile.can("reports")) Tab("c_reports", "التقارير", Icons.Default.Assessment) else null,
         Tab("me", "أنا", Icons.Default.Person),
     )
     AppShell(profile, onOpenOrder = { nav.navigate("order/$it") }) {
-        TabScaffold(nav, tabs, "c_deliveries") {
+        TabScaffold(nav, tabs, tabs.first().route) {
             composable("c_deliveries") { CourierScreen(profile, onOpen = { nav.navigate("order/$it") }) }
             composable("c_history") { CourierHistoryScreen(profile, onOpen = { nav.navigate("order/$it") }) }
             composable("c_reports") { ReportScreen("courier", "تقارير توصيلاتي") }
@@ -65,15 +65,15 @@ fun CourierApp(profile: Profile) {
 @Composable
 fun AdminApp(profile: Profile) {
     val nav = rememberNavController()
-    val tabs = listOf(
-        Tab("a_dashboard", "الرئيسية", Icons.Default.Home),
-        Tab("a_orders", "الطلبات", Icons.AutoMirrored.Filled.ReceiptLong),
-        Tab("c_deliveries", "التوصيل", Icons.Default.LocalShipping),
-        Tab("a_finance", "المالية", Icons.Default.AccountBalanceWallet),
+    val tabs = listOfNotNull(
+        if (profile.can("reports")) Tab("a_dashboard", "الرئيسية", Icons.Default.Home) else null,
+        if (profile.can("orders")) Tab("a_orders", "الطلبات", Icons.AutoMirrored.Filled.ReceiptLong) else null,
+        if (profile.can("deliveries")) Tab("c_deliveries", "التوصيل", Icons.Default.LocalShipping) else null,
+        if (profile.can("finance")) Tab("a_finance", "المالية", Icons.Default.AccountBalanceWallet) else null,
         Tab("a_more", "الإدارة", Icons.Default.Settings),
     )
     AppShell(profile, onOpenOrder = { nav.navigate("order/$it") }) {
-        TabScaffold(nav, tabs, "a_dashboard") {
+        TabScaffold(nav, tabs, tabs.first().route) {
             composable("a_dashboard") { DashboardScreen() }
             composable("a_orders") { AdminOrdersScreen(onOpen = { nav.navigate("order/$it") }) }
             composable("c_deliveries") { CourierScreen(profile, onOpen = { nav.navigate("order/$it") }) }
@@ -84,6 +84,7 @@ fun AdminApp(profile: Profile) {
             composable("a_products/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
                 ProductsManager(it.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
+            composable("a_categories") { AdminCategoriesScreen(onBack = { nav.popBackStack() }) }
             composable("a_users") { AdminUsersScreen(profile, onBack = { nav.popBackStack() }) }
             composable("a_settings") { AdminSettingsScreen(onBack = { nav.popBackStack() }) }
             composable("a_audit") { AuditScreen(onBack = { nav.popBackStack() }) }

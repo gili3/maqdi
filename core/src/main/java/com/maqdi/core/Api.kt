@@ -41,6 +41,10 @@ private val errors = mapOf(
     "invalid_range" to "نطاق التاريخ غير صحيح.",
     "too_many_open_orders" to "لديك طلبات مفتوحة كثيرة. انتظر اكتمال أحدها ثم أرسل غيره.",
     "already_taken" to "استلم مندوب آخر هذا الطلب.",
+    "permission_denied" to "ليست لديك صلاحية لهذه العملية. تواصل مع المدير.",
+    "category_in_use" to "هذه الفئة مستعملة في متاجر. غيّر فئة تلك المتاجر أولًا.",
+    "role_has_no_permissions" to "هذا الحساب (زبون) بلا صلاحيات تُخصَّص.",
+    "cannot_remove_own_permissions" to "لا يمكنك سحب صلاحية «تخصيص الصلاحيات» من نفسك.",
 )
 
 fun arabicError(msg: String?): String {
@@ -119,13 +123,30 @@ object Api {
     }
 
     // ---------- الإدارة ----------
+    /** يرجع معرّف المتجر. imagePath: null = لا تغيّر الصورة (لا يُرسَل الحقل) */
     suspend fun adminUpsertStore(
         storeId: String?, name: String, category: String, phone: String, address: String?, status: String, isOpen: Boolean,
-    ) {
-        call("adminUpsertStore", mapOf(
+        imagePath: String? = null,
+    ): String {
+        val m = mutableMapOf<String, Any?>(
             "storeId" to storeId, "name" to name, "category" to category, "phone" to phone,
             "address" to address, "status" to status, "isOpen" to isOpen,
-        ))
+        )
+        if (imagePath != null) m["imagePath"] = imagePath
+        return call("adminUpsertStore", m)["storeId"] as? String ?: throw ApiException("ردّ غير متوقع من الخادم.")
+    }
+
+    suspend fun adminUpsertCategory(categoryId: String?, name: String, order: Long, isActive: Boolean) {
+        call("adminUpsertCategory", mapOf("categoryId" to categoryId, "name" to name, "order" to order, "isActive" to isActive))
+    }
+
+    suspend fun adminDeleteCategory(categoryId: String) {
+        call("adminDeleteCategory", mapOf("categoryId" to categoryId))
+    }
+
+    /** permissions = null يعيد الافتراضي (كل صلاحيات الدور) */
+    suspend fun adminSetPermissions(uid: String, permissions: List<String>?) {
+        call("adminSetUserPermissions", mapOf("uid" to uid, "permissions" to permissions))
     }
 
     suspend fun adminInvite(email: String, role: String, storeId: String?) {

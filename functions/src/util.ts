@@ -2,6 +2,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, Transaction, getFirestore } from "firebase-admin/firestore";
 import { CallableRequest, HttpsError, onCall } from "firebase-functions/v2/https";
 import { DEFAULT_SETTINGS, REGION, Role } from "./config";
+import { effectivePermissions } from "./permissions";
 
 if (getApps().length === 0) initializeApp();
 export const db = getFirestore();
@@ -16,13 +17,15 @@ export interface Actor {
   role: Role;
   name: string;
   storeId: string | null;
+  permissions: string[];
 }
 
 // يتحقق من الهوية والدور وأن الحساب غير موقوف. يقرأ من الخادم دائمًا.
 export async function loadActor(
   req: CallableRequest<unknown>,
   roles?: Role[],
-  tx?: Transaction
+  tx?: Transaction,
+  need?: Partial<Record<Role, string>>
 ): Promise<Actor> {
   if (!req.auth) throw new HttpsError("unauthenticated", "login_required");
   const ref = db.doc(`users/${req.auth.uid}`);
@@ -32,11 +35,15 @@ export async function loadActor(
   if (u.status !== "active") throw new HttpsError("permission-denied", "account_suspended");
   const role = u.role as Role;
   if (roles && !roles.includes(role)) throw new HttpsError("permission-denied", "role_not_allowed");
+  const permissions = effectivePermissions(role, u.permissions);
+  const required = need?.[role];
+  if (required && !permissions.includes(required)) throw new HttpsError("permission-denied", "permission_denied");
   return {
     uid: req.auth.uid,
     role,
     name: String(u.name ?? ""),
     storeId: (u.storeId as string | undefined) ?? null,
+    permissions,
   };
 }
 

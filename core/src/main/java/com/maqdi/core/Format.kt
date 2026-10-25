@@ -73,7 +73,32 @@ object St {
     }
 }
 
-fun categoryLabel(c: String) = when (c) { "grocery" -> "بقالة"; "pharmacy" -> "صيدلية"; else -> "أخرى" }
+/** أسماء الفئات المحمّلة من الإدارة (حالة مرصودة فتتحدّث الشاشات تلقائيًا) */
+object CategoryNames {
+    val names = androidx.compose.runtime.mutableStateMapOf<String, String>()
+    private val defaults = mapOf("grocery" to "بقالة", "pharmacy" to "صيدلية", "other" to "أخرى")
+    private val loaded = androidx.compose.runtime.mutableStateOf<List<Category>>(emptyList())
+
+    fun label(id: String): String = names[id] ?: defaults[id] ?: "أخرى"
+
+    fun update(list: List<Category>) {
+        loaded.value = list
+        names.clear()
+        list.forEach { names[it.id] = it.name }
+    }
+
+    /** الفئات الفعّالة بالترتيب؛ إن لم تُنشأ فئات بعد تُعرض الافتراضية الثلاث */
+    fun options(): List<Category> {
+        val l = loaded.value
+        if (l.isEmpty()) return defaults.entries.mapIndexed { i, e -> Category(e.key, e.value, i.toLong(), true) }
+        return l.filter { it.isActive }.sortedWith(compareBy({ it.order }, { it.name }))
+    }
+
+    /** كل الفئات (حتى المعطّلة) للإدارة */
+    fun all(): List<Category> = loaded.value.sortedWith(compareBy({ it.order }, { it.name }))
+}
+
+fun categoryLabel(c: String) = CategoryNames.label(c)
 fun roleLabel(r: String) = when (r) { "customer" -> "زبون"; "merchant" -> "تاجر"; "admin" -> "مدير"; "courier" -> "موصّل"; else -> r }
 fun settlementLabel(s: String) = when (s) { "settled" -> "مسوّى"; "partially_settled" -> "مسوّى جزئيًا"; else -> "غير مسوّى" }
 

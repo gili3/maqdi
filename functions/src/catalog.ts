@@ -3,28 +3,37 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { normalizeSearch } from "./textUtil";
 import { bool, callable, db, docId, int, loadActor, obj, oneOf, optStr, phone, str, writeAudit } from "./util";
 
+// الفئات الأصلية تبقى مقبولة حتى لو لم تُنشأ كوثائق في categories
+export const LEGACY_CATEGORIES = ["grocery", "pharmacy", "other"];
+
 // ---------- المتاجر (المدير) ----------
 export const adminUpsertStore = callable(async (req) => {
   const d = obj(req.data);
   const storeId = d.storeId ? docId(d.storeId, "storeId") : null;
   const data = {
     name: str(d.name, "name", 2, 80),
-    category: oneOf(d.category, "category", ["grocery", "pharmacy", "other"] as const),
+    category: docId(d.category, "category"),
     phone: phone(d.phone),
     address: optStr(d.address, "address", 200),
     status: oneOf(d.status, "status", ["active", "suspended"] as const),
     isOpen: bool(d.isOpen, "isOpen"),
   };
+  // الصورة اختيارية: غيابها = إبقاء الحالية، null = إزالتها
+  const imagePath = d.imagePath === undefined ? undefined : optStr(d.imagePath, "imagePath", 300);
   const result = await db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["admin"], tx);
+    const actor = await loadActor(req, ["admin"], tx, { admin: "stores" });
     const ref = storeId ? db.doc(`stores/${storeId}`) : db.collection("stores").doc();
+    const catSnap = LEGACY_CATEGORIES.includes(data.category) ? null : await tx.get(db.doc(`categories/${data.category}`));
     const snap = await tx.get(ref);
     if (storeId && !snap.exists) throw new HttpsError("not-found", "store_not_found");
+    if (catSnap && !catSnap.exists) throw new HttpsError("invalid-argument", "invalid_category");
+    if (imagePath && !imagePath.startsWith(`stores/${ref.id}/`)) throw new HttpsError("invalid-argument", "invalid_imagePath");
     const now = Timestamp.now();
     const renamed = snap.exists && snap.get("name") !== data.name;
-    if (snap.exists) tx.update(ref, { ...data, updatedAt: now });
-    else tx.set(ref, { ...data, createdAt: now, updatedAt: now });
-    writeAudit(tx, actor, snap.exists ? "update_store" : "create_store", "store", ref.id, data);
+    const full = imagePath === undefined ? data : { ...data, imagePath };
+    if (snap.exists) tx.update(ref, { ...full, updatedAt: now });
+    else tx.set(ref, { ...full, imagePath: imagePath ?? null, createdAt: now, updatedAt: now });
+    writeAudit(tx, actor, snap.exists ? "update_store" : "create_store", "store", ref.id, { ...full });
     return { storeId: ref.id, renamed };
   });
   // تحديث اسم المتجر المنسوخ في منتجاته (حتى 450 منتجًا)
@@ -53,7 +62,7 @@ export const upsertProduct = callable(async (req) => {
   };
 
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["merchant", "admin"], tx);
+    const actor = await loadActor(req, ["merchant", "admin"], tx, { merchant: "products", admin: "stores" });
     const storeId = actor.role === "merchant" ? actor.storeId : docId(d.storeId, "storeId");
     if (!storeId) throw new HttpsError("failed-precondition", "no_store");
     const storeSnap = await tx.get(db.doc(`stores/${storeId}`));
@@ -80,7 +89,7 @@ export const setStoreOpen = callable(async (req) => {
   const d = obj(req.data);
   const isOpen = bool(d.isOpen, "isOpen");
   return db.runTransaction(async (tx) => {
-    const actor = await loadActor(req, ["merchant", "admin"], tx);
+    const actor = await loadActor(req, ["merchant", "admin"], tx, { merchant: "open_close", admin: "stores" });
     const storeId = actor.role === "merchant" ? actor.storeId : docId(d.storeId, "storeId");
     if (!storeId) throw new HttpsError("failed-precondition", "no_store");
     const ref = db.doc(`stores/${storeId}`);

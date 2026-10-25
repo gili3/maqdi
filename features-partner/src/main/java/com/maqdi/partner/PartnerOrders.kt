@@ -63,7 +63,7 @@ fun MerchantOrdersScreen(profile: Profile, onOpen: (String) -> Unit) {
     val orders = rememberLoadable(storeId) { Repo.storeOrders(storeId) }
     Screen("طلبات المتجر") { pad ->
         Column(Modifier.padding(pad)) {
-            if (storeId.isNotBlank()) StoreOpenSwitch(storeId)
+            if (storeId.isNotBlank() && profile.can("open_close")) StoreOpenSwitch(storeId)
             ChipRow(listOf("new" to "جديدة", "active" to "قيد التنفيذ", "done" to "المنتهية"), filter) { filter = it }
             LoadableView(orders) { list ->
                 val shown = list.filter {

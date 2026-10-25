@@ -55,7 +55,7 @@ export const adminReport = callable(async (req) => {
   const d = obj(req.data);
   const { from, to } = range(d);
   const storeId = d.storeId ? docId(d.storeId, "storeId") : null;
-  await loadActor(req, ["admin"]);
+  await loadActor(req, ["admin"], undefined, { admin: "reports" });
   const { rows, truncated } = await loadDelivered(from, to, { storeId });
   return { ...buildReport(rows, LOCAL_OFFSET_MS), truncated, otherStatuses: await otherStatuses(from, to, storeId) };
 });
@@ -63,7 +63,7 @@ export const adminReport = callable(async (req) => {
 // ---------- تقرير المتجر (متجره فقط، بلا إيراد المنصة) ----------
 export const merchantReport = callable(async (req) => {
   const { from, to } = range(obj(req.data));
-  const actor = await loadActor(req, ["merchant"]);
+  const actor = await loadActor(req, ["merchant"], undefined, { merchant: "reports" });
   if (!actor.storeId) throw new HttpsError("failed-precondition", "no_store");
   const { rows, truncated } = await loadDelivered(from, to, { storeId: actor.storeId });
   const r = buildReport(rows, LOCAL_OFFSET_MS);
@@ -79,7 +79,7 @@ export const merchantReport = callable(async (req) => {
 // ---------- تقرير المندوب (توصيلاته هو) ----------
 export const courierReport = callable(async (req) => {
   const { from, to } = range(obj(req.data));
-  const actor = await loadActor(req, ["courier", "admin"]);
+  const actor = await loadActor(req, ["courier", "admin"], undefined, { courier: "reports", admin: "reports" });
   const { rows, truncated } = await loadDelivered(from, to, { courierUid: actor.uid });
   const r = buildReport(rows, LOCAL_OFFSET_MS);
   return {

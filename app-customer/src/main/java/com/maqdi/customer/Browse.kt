@@ -69,7 +69,7 @@ fun StoresScreen(onOpen: (String) -> Unit, onSearch: () -> Unit) {
                 Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf("all" to "الكل", "grocery" to "بقالات", "pharmacy" to "صيدليات", "other" to "أخرى").forEach { (k, v) ->
+                (listOf("all" to "الكل") + com.maqdi.core.CategoryNames.options().map { it.id to it.name }).forEach { (k, v) ->
                     FilterChip(selected = cat == k, onClick = { cat = k }, label = { Text(v) })
                 }
             }
@@ -99,6 +99,8 @@ fun OpenBadge(open: Boolean) {
 private fun StoreRow(s: Store, onClick: () -> Unit) {
     MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), onClick = onClick) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            StorageImage(s.imagePath, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
+            androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(s.name, style = MaterialTheme.typography.titleMedium)
                 Text(categoryLabel(s.category), color = Mq.Muted)

@@ -14,6 +14,8 @@ const USERS = {
   c1: { role: "customer", status: "active", name: "زبون 1", phone: "0911", fcmTokens: [] },
   c2: { role: "customer", status: "active", name: "زبون 2", fcmTokens: [] },
   k1: { role: "courier", status: "active", name: "موصّل", fcmTokens: [] },
+  limitedAdmin: { role: "admin", status: "active", name: "مدير مقيّد", permissions: ["orders", "stores"], fcmTokens: [] },
+  m1x: { role: "merchant", status: "active", storeId: "s1", name: "تاجر مقيّد", permissions: ["products"], fcmTokens: [] },
   sus: { role: "customer", status: "suspended", name: "موقوف", fcmTokens: [] },
 };
 
@@ -158,4 +160,35 @@ test("الموصّل لا يرى توصيلات غيره الجارية، وير
   await assertSucceeds(getDocs(query(orders, where("status", "==", "ready_for_pickup"))));
   await assertSucceeds(getDocs(query(orders, where("courierUid", "==", "k1"), where("status", "==", "out_for_delivery"))));
   await assertFails(getDocs(query(orders, where("status", "==", "out_for_delivery"))));
+});
+
+test("مدير بلا حقل صلاحيات يملك كل شيء (سلوك قديم)", async () => {
+  const db = env.authenticatedContext("admin1").firestore();
+  await assertSucceeds(getDoc(doc(db, "audit_logs/a1")));
+  await assertSucceeds(getDoc(doc(db, "financial_entries/e1")));
+});
+
+test("المدير المقيَّد يقرأ الطلبات لكن لا المالية ولا التدقيق", async () => {
+  const db = env.authenticatedContext("limitedAdmin").firestore();
+  await assertSucceeds(getDoc(doc(db, "orders/o1")));
+  await assertFails(getDoc(doc(db, "financial_entries/e1")));
+  await assertFails(getDoc(doc(db, "audit_logs/a1")));
+  await assertFails(getDoc(doc(db, "users/c1")));
+});
+
+test("الفئات: قراءة لكل نشط، والكتابة مغلقة", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), "categories/grocery"), { name: "بقالة", order: 1, isActive: true }); });
+  const c = env.authenticatedContext("c1").firestore();
+  await assertSucceeds(getDoc(doc(c, "categories/grocery")));
+  await assertFails(setDoc(doc(c, "categories/x"), { name: "x" }));
+  const a = env.authenticatedContext("admin1").firestore();
+  await assertFails(setDoc(doc(a, "categories/x"), { name: "x" }));
+});
+
+test("التاجر المقيَّد بلا صلاحية الطلبات والحساب لا يقرأ طلباته ولا مستحقاته", async () => {
+  const db = env.authenticatedContext("m1x").firestore();
+  await assertFails(getDoc(doc(db, "orders/o1")));
+  await assertFails(getDoc(doc(db, "store_balances/s1")));
+  await assertFails(getDoc(doc(db, "financial_entries/e1")));
+  await assertSucceeds(getDoc(doc(db, "stores/s1")));
 });

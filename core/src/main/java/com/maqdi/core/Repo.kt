@@ -9,6 +9,7 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
@@ -63,8 +64,16 @@ object Repo {
         if (toMs != null) q = q.whereLessThan("createdAt", Timestamp(java.util.Date(toMs)))
         return q.orderBy("createdAt", desc).limit(200).listFlow { it.toOrder() }
     }
-    fun courierOrders() =
-        db.collection("orders").whereIn("status", listOf(St.READY, St.OUT)).listFlow { it.toOrder() }
+    /** الجاهزة للاستلام (يراها كل موصّل) + توصيلات هذا الموصّل الجارية فقط؛ المدير يرى الحالتين */
+    fun courierOrders(uid: String, isAdmin: Boolean): Flow<List<Order>> =
+        if (isAdmin) {
+            db.collection("orders").whereIn("status", listOf(St.READY, St.OUT)).listFlow { it.toOrder() }
+        } else {
+            combine(
+                db.collection("orders").whereEqualTo("status", St.READY).listFlow { it.toOrder() },
+                db.collection("orders").whereEqualTo("courierUid", uid).whereEqualTo("status", St.OUT).listFlow { it.toOrder() },
+            ) { ready, mine -> ready + mine }
+        }
 
     fun balance(storeId: String) = db.document("store_balances/$storeId").docFlow { it.toBalance() }
     fun balances() = db.collection("store_balances").listFlow { it.toBalance() }

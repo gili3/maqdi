@@ -46,12 +46,12 @@ private sealed interface Hit {
 
 /** بحث عام: المتاجر والمنتجات المتاحة في المتاجر النشطة، بتطبيع عربي (همزات، ياء/ألف مقصورة، تاء مربوطة، تشكيل) */
 @Composable
-fun SearchScreen(onOpenStore: (String) -> Unit) {
+fun SearchScreen(onBack: () -> Unit, onOpenStore: (String) -> Unit) {
     var q by remember { mutableStateOf("") }
     val stores = rememberLoadable { Repo.activeStores() }
     val products = rememberLoadable { Repo.availableProductsOnce() }
 
-    Screen("بحث") { pad ->
+    Screen("بحث", onBack = onBack) { pad ->
         Column(Modifier.padding(pad)) {
             SearchField(q, { q = it }, "ابحث عن منتج أو متجر", Modifier.fillMaxWidth().padding(12.dp))
             LoadableView(stores) { storeList ->

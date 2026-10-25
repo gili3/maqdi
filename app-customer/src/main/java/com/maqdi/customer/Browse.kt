@@ -1,5 +1,6 @@
 package com.maqdi.customer
 
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -52,13 +53,20 @@ import com.maqdi.core.money
 import com.maqdi.core.rememberLoadable
 
 @Composable
-fun StoresScreen(onOpen: (String) -> Unit) {
+fun StoresScreen(onOpen: (String) -> Unit, onSearch: () -> Unit) {
     var cat by remember { mutableStateOf("all") }
     val stores = rememberLoadable { Repo.activeStores() }
     Screen("مقضي") { pad ->
         Column(Modifier.padding(pad)) {
+            MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), onClick = onSearch) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = null, tint = Mq.Muted)
+                    androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
+                    Text("ابحث عن منتج أو متجر", color = Mq.Muted)
+                }
+            }
             Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 listOf("all" to "الكل", "grocery" to "بقالات", "pharmacy" to "صيدليات", "other" to "أخرى").forEach { (k, v) ->

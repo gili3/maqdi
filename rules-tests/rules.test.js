@@ -142,3 +142,17 @@ test("الموصّل يقرأ سجل توصيلاته فقط", async () => {
   await assertSucceeds(getDoc(doc(as("k1"), "orders/o3")));
   await assertFails(getDoc(doc(as("k1"), "orders/o4")));
 });
+
+test("الموصّل لا يرى توصيلات غيره الجارية، ويرى الجاهزة وتوصيلاته هو", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "orders/o5"), { customerId: "c2", storeId: "s2", status: "out_for_delivery", courierUid: "other" });
+    await setDoc(doc(ctx.firestore(), "orders/o6"), { customerId: "c2", storeId: "s2", status: "out_for_delivery", courierUid: "k1" });
+  });
+  await assertFails(getDoc(doc(as("k1"), "orders/o5")));
+  await assertSucceeds(getDoc(doc(as("k1"), "orders/o6")));
+  await assertSucceeds(getDoc(doc(as("k1"), "orders/o2")));
+  const orders = collection(as("k1"), "orders");
+  await assertSucceeds(getDocs(query(orders, where("status", "==", "ready_for_pickup"))));
+  await assertSucceeds(getDocs(query(orders, where("courierUid", "==", "k1"), where("status", "==", "out_for_delivery"))));
+  await assertFails(getDocs(query(orders, where("status", "==", "out_for_delivery"))));
+});

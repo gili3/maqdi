@@ -86,7 +86,8 @@ fun MeScreen(profile: Profile) {
     Screen("حسابي") { pad ->
         Column(Modifier.padding(pad).padding(16.dp)) {
             Text(profile.name.ifBlank { profile.email })
-            Text(profile.email)
+            Text(profile.email, color = com.maqdi.core.Mq.Muted)
+            Text(com.maqdi.core.roleLabel(profile.role), color = com.maqdi.core.Mq.Green)
             ActionButton("تسجيل الخروج", Modifier.fillMaxWidth().padding(top = 24.dp), tonal = true) { signOutAll(activity) }
         }
     }

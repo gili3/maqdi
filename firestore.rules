@@ -59,7 +59,8 @@ service cloud.firestore {
         resource.data.customerId == request.auth.uid
         || isMerchantOf(resource.data.storeId)
         || isAdmin()
-        || (isCourier() && resource.data.status in ['ready_for_pickup', 'out_for_delivery'])
+        // الجاهزة للاستلام يراها كل موصّل؛ أما «في الطريق» فيراها الموصّل المستلِم فقط (السطر التالي)
+        || (isCourier() && resource.data.status == 'ready_for_pickup')
         || (isCourier() && resource.data.get('courierUid', '') == request.auth.uid)
       );
       allow write: if false;

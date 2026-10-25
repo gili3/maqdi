@@ -84,7 +84,7 @@ fun MerchantOrdersScreen(profile: Profile, onOpen: (String) -> Unit) {
 @Composable
 fun CourierScreen(profile: Profile, onOpen: (String) -> Unit) {
     var filter by remember { mutableStateOf("ready") }
-    val orders = rememberLoadable { Repo.courierOrders() }
+    val orders = rememberLoadable { Repo.courierOrders(profile.uid, profile.role == "admin") }
     Screen("التوصيل") { pad ->
         Column(Modifier.padding(pad)) {
             ChipRow(listOf("ready" to "جاهزة للاستلام", "out" to "قيد التوصيل"), filter) { filter = it }

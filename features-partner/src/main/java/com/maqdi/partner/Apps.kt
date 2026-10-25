@@ -1,5 +1,11 @@
 package com.maqdi.partner
 
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Home
@@ -21,11 +27,10 @@ import com.maqdi.core.Profile
 fun MerchantApp(profile: Profile) {
     val nav = rememberNavController()
     val tabs = listOf(
-        Tab("m_orders", "الطلبات", Icons.Default.Menu),
-        Tab("m_products", "المنتجات", Icons.Default.ShoppingCart),
+        Tab("m_orders", "الطلبات", Icons.Default.ReceiptLong),
+        Tab("m_products", "المنتجات", Icons.Default.Inventory2),
         Tab("m_reports", "التقارير", Icons.Default.Assessment),
-        Tab("m_account", "حساب المتجر", Icons.Default.Info),
-        Tab("me", "أنا", Icons.Default.Person),
+        Tab("m_account", "حسابي", Icons.Default.Storefront),
     )
     AppShell(profile, onOpenOrder = { nav.navigate("order/$it") }) {
         TabScaffold(nav, tabs, "m_orders") {
@@ -44,8 +49,8 @@ fun MerchantApp(profile: Profile) {
 fun CourierApp(profile: Profile) {
     val nav = rememberNavController()
     val tabs = listOf(
-        Tab("c_deliveries", "التوصيل", Icons.Default.Home),
-        Tab("c_history", "سجلي", Icons.Default.Menu),
+        Tab("c_deliveries", "التوصيل", Icons.Default.LocalShipping),
+        Tab("c_history", "سجلي", Icons.Default.History),
         Tab("c_reports", "التقارير", Icons.Default.Assessment),
         Tab("me", "أنا", Icons.Default.Person),
     )
@@ -66,9 +71,9 @@ fun AdminApp(profile: Profile) {
     val nav = rememberNavController()
     val tabs = listOf(
         Tab("a_dashboard", "الرئيسية", Icons.Default.Home),
-        Tab("a_orders", "الطلبات", Icons.Default.Menu),
-        Tab("c_deliveries", "التوصيل", Icons.Default.ShoppingCart),
-        Tab("a_finance", "المالية", Icons.Default.Info),
+        Tab("a_orders", "الطلبات", Icons.Default.ReceiptLong),
+        Tab("c_deliveries", "التوصيل", Icons.Default.LocalShipping),
+        Tab("a_finance", "المالية", Icons.Default.AccountBalanceWallet),
         Tab("a_more", "الإدارة", Icons.Default.Settings),
     )
     AppShell(profile, onOpenOrder = { nav.navigate("order/$it") }) {

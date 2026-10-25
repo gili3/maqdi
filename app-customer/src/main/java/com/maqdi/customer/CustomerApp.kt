@@ -1,5 +1,6 @@
 package com.maqdi.customer
 
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -37,9 +38,8 @@ fun CustomerApp(profile: Profile) {
     val route = entry?.destination?.route
     val tabs = listOf(
         Tab("stores", "المتاجر", Icons.Default.Home),
-        Tab("search", "بحث", Icons.Default.Search),
         Tab("cart", if (Cart.count > 0) "السلة (${Cart.count})" else "السلة", Icons.Default.ShoppingCart),
-        Tab("orders", "طلباتي", Icons.Default.Menu),
+        Tab("orders", "طلباتي", Icons.Default.ReceiptLong),
         Tab("account", "حسابي", Icons.Default.Person),
     )
     val tabRoutes = tabs.map { it.route }
@@ -75,12 +75,12 @@ fun CustomerApp(profile: Profile) {
         popEnterTransition = { fadeIn(tween(220)) },
         popExitTransition = { fadeOut(tween(120)) },
         ) {
-            composable("stores") { StoresScreen(onOpen = { nav.navigate("store/$it") }) }
+            composable("stores") { StoresScreen(onOpen = { nav.navigate("store/$it") }, onSearch = { nav.navigate("search") }) }
             composable("store/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
                 val id = it.arguments?.getString("id") ?: ""
                 ProductsScreen(id, onBack = { nav.popBackStack() }, onOpenCart = { nav.navigate("cart") })
             }
-            composable("search") { SearchScreen(onOpenStore = { nav.navigate("store/$it") }) }
+            composable("search") { SearchScreen(onBack = { nav.popBackStack() }, onOpenStore = { nav.navigate("store/$it") }) }
             composable("cart") {
                 CartScreen(
                     profile,

@@ -99,7 +99,7 @@ object CategoryNames {
 }
 
 fun categoryLabel(c: String) = CategoryNames.label(c)
-fun roleLabel(r: String) = when (r) { "customer" -> "زبون"; "merchant" -> "تاجر"; "admin" -> "مدير"; "courier" -> "موصّل"; else -> r }
+fun roleLabel(r: String) = when (r) { "customer" -> "زبون"; "merchant" -> "تاجر"; "admin" -> "مدير"; "courier" -> "مندوب"; else -> r }
 fun settlementLabel(s: String) = when (s) { "settled" -> "مسوّى"; "partially_settled" -> "مسوّى جزئيًا"; else -> "غير مسوّى" }
 
 fun money(v: Long): String = String.format(Locale.US, "%,d", v) + " ج.س"

@@ -131,7 +131,7 @@ fun ProductsScreen(storeId: String, onBack: () -> Unit, onOpenCart: () -> Unit) 
             if (closed) {
                 Text(
                     "المتجر مغلق حاليًا. يمكنك التصفح لكن لا يمكن إرسال طلب.",
-                    color = Color(0xFFB91C1C), modifier = Modifier.padding(12.dp),
+                    color = Mq.Red, modifier = Modifier.padding(12.dp),
                 )
             }
             SearchField(q, { q = it }, "ابحث في المتجر", Modifier.fillMaxWidth().padding(horizontal = 12.dp))
@@ -181,7 +181,7 @@ private fun ProductRow(p: Product, qty: Int, canOrder: Boolean, onQty: (Int) -> 
             Column(Modifier.weight(1f)) {
                 Text(p.name, style = MaterialTheme.typography.titleMedium)
                 Text(money(p.price), color = MaterialTheme.colorScheme.primary)
-                if (!p.isAvailable || maxQty <= 0) Text("غير متوفر", color = Color(0xFFB91C1C))
+                if (!p.isAvailable || maxQty <= 0) Text("غير متوفر", color = Mq.Red)
             }
             if (p.isAvailable && maxQty > 0 && canOrder) {
                 Stepper(qty, onQty, min = 0, max = maxQty)

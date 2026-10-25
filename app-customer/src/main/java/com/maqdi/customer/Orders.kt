@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.maqdi.core.Mq
 import com.maqdi.core.ActionButton
 import com.maqdi.core.Api
 import com.maqdi.core.ConfirmDialog
@@ -61,7 +62,7 @@ fun OrdersScreen(uid: String, onOpen: (String) -> Unit) {
                                     (if (o.totalsAreEstimate) "تقريبي: " else "") + money(o.total),
                                     color = MaterialTheme.colorScheme.primary,
                                 )
-                                Text(dateTime(o.createdAt), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                Text(dateTime(o.createdAt), color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -101,10 +102,10 @@ private fun OrderBody(o: Order) {
                 St.PENDING -> Text(
                     "بانتظار مراجعة التاجر" + (minutesLeft(o.expiresAt)?.let { " (تنتهي المهلة بعد نحو $it دقيقة)" } ?: ""),
                 )
-                St.REJECTED -> Text("سبب الرفض: ${o.rejectReason ?: "—"}", color = Color(0xFFB91C1C))
-                St.CANCELLED -> Text("سبب الإلغاء: ${o.cancelReason ?: "—"}", color = Color(0xFFB91C1C))
-                St.FAILED -> Text("سبب تعذّر التسليم: ${o.failReason ?: "—"}", color = Color(0xFFB91C1C))
-                St.EXPIRED -> Text("انتهت مهلة الطلب. يمكنك إرسال طلب جديد.", color = Color(0xFFB91C1C))
+                St.REJECTED -> Text("سبب الرفض: ${o.rejectReason ?: "—"}", color = Mq.Red)
+                St.CANCELLED -> Text("سبب الإلغاء: ${o.cancelReason ?: "—"}", color = Mq.Red)
+                St.FAILED -> Text("سبب تعذّر التسليم: ${o.failReason ?: "—"}", color = Mq.Red)
+                St.EXPIRED -> Text("انتهت مهلة الطلب. يمكنك إرسال طلب جديد.", color = Mq.Red)
                 St.OUT -> Text("طلبك في الطريق إليك.")
                 St.DELIVERED -> Text("تم تسليم طلبك. شكرًا لك.")
                 else -> {}
@@ -127,7 +128,7 @@ private fun OrderBody(o: Order) {
                     Text(money(l.lineTotal))
                 }
             }
-            o.proposal?.note?.let { Text("ملاحظة التاجر: $it", color = Color.Gray, modifier = Modifier.padding(top = 6.dp)) }
+            o.proposal?.note?.let { Text("ملاحظة التاجر: $it", color = Mq.Muted, modifier = Modifier.padding(top = 6.dp)) }
         }
 
         Section(if (o.totalsAreEstimate) "الإجمالي (تقديري)" else "الإجمالي") {

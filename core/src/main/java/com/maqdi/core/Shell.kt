@@ -102,7 +102,7 @@ fun NotificationsScreen(uid: String, onBack: () -> Unit, onOpenOrder: (String) -
                                 }
                                 n.orderId?.let(onOpenOrder)
                             },
-                            colors = CardDefaults.cardColors(containerColor = if (n.read) Color.White else Color(0xFFECFDF5)),
+                            colors = CardDefaults.cardColors(containerColor = if (n.read) Mq.Card else Mq.GreenSoft),
                         ) {
                             Column(Modifier.padding(14.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -110,7 +110,7 @@ fun NotificationsScreen(uid: String, onBack: () -> Unit, onOpenOrder: (String) -
                                     if (!n.read) Badge()
                                 }
                                 Text(n.body)
-                                Text(dateTime(n.createdAt), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                Text(dateTime(n.createdAt), color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }

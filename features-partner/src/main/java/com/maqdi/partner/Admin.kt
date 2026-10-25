@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import com.maqdi.core.Mq
 import com.maqdi.core.ActionButton
 import com.maqdi.core.Api
 import com.maqdi.core.ApiException
@@ -108,7 +109,7 @@ fun DashboardScreen() {
                         val c = d.byStatus[s] ?: 0L
                         if (c > 0) InfoRow(St.label(s), c.toString())
                     }
-                    if (d.byStatus.values.all { it == 0L }) Text("لا توجد طلبات بعد.", color = Color.Gray)
+                    if (d.byStatus.values.all { it == 0L }) Text("لا توجد طلبات بعد.", color = Mq.Muted)
                 }
             }
         }
@@ -157,7 +158,7 @@ fun FinanceScreen(onStore: (String) -> Unit) {
                 val owed = list.sumOf { it.outstanding }
                 Section("مستحقات المتاجر عليك") {
                     InfoRow("الإجمالي المتبقي", money(owed), bold = true)
-                    Text("المبلغ الذي حصّلته من الزبائن نيابة عن المتاجر ولم تسدّده بعد. ليس ربحًا للمنصة.", color = Color.Gray)
+                    Text("المبلغ الذي حصّلته من الزبائن نيابة عن المتاجر ولم تسدّده بعد. ليس ربحًا للمنصة.", color = Mq.Muted)
                 }
                 if (list.isEmpty()) Empty("لا توجد مستحقات بعد. تظهر بعد أول طلب مسلَّم.")
                 else LazyColumn {
@@ -208,18 +209,18 @@ fun StoreFinanceScreen(storeId: String, onBack: () -> Unit) {
             LoadableView(entries) { list ->
                 val reversed = list.mapNotNull { it.reversesEntryId }.toSet()
                 Section("القيود المالية") {
-                    if (list.isEmpty()) Text("لا توجد قيود.", color = Color.Gray)
+                    if (list.isEmpty()) Text("لا توجد قيود.", color = Mq.Muted)
                     list.forEach { e ->
                         Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(entryTypeLabel(e.type) + " • " + ledgerLabel(e.ledger), Modifier.weight(1f))
-                                Text(money(e.amount), color = if (e.amount < 0) Color(0xFFB91C1C) else Color(0xFF166534))
+                                Text(money(e.amount), color = if (e.amount < 0) Mq.Red else Mq.Green)
                             }
-                            Text(dateTime(e.createdAt) + (e.note?.let { " • $it" } ?: ""), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            Text(dateTime(e.createdAt) + (e.note?.let { " • $it" } ?: ""), color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                             if (e.reversesEntryId == null && e.id !in reversed) {
                                 TextButton(onClick = { correcting = e }) { Text("تصحيح هذا القيد") }
                             } else if (e.id in reversed) {
-                                Text("مُصحَّح", color = Color.Gray)
+                                Text("مُصحَّح", color = Mq.Muted)
                             }
                         }
                     }
@@ -244,7 +245,7 @@ private fun CorrectionDialog(e: Entry, onDismiss: () -> Unit) {
         title = { Text("تصحيح قيد بمبلغ ${money(e.amount)}") },
         text = {
             Column {
-                Text("سيُنشأ قيد عكسي مرتبط بالقيد الأصلي، ولا يُحذف الأصل.", color = Color.Gray)
+                Text("سيُنشأ قيد عكسي مرتبط بالقيد الأصلي، ولا يُحذف الأصل.", color = Mq.Muted)
                 Field("سبب التصحيح", reason, { reason = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = false)
                 Field("المبلغ الصحيح البديل (اختياري)", repl, { repl = it.filter { c -> c.isDigit() || c == '-' } },
                     Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Number)
@@ -275,7 +276,7 @@ fun AdminMoreScreen(profile: Profile, onNav: (String) -> Unit) {
                 "a_export" to "تصدير التقارير (CSV)",
                 "a_audit" to "سجل التدقيق",
             ).forEach { (r, t) -> ActionButton(t, tonal = true) { onNav(r) } }
-            Text(profile.email, color = Color.Gray, modifier = Modifier.padding(top = 12.dp))
+            Text(profile.email, color = Mq.Muted, modifier = Modifier.padding(top = 12.dp))
             ActionButton("تسجيل الخروج", destructive = true) { signOutAll(activity) }
         }
     }
@@ -305,7 +306,7 @@ fun AdminStoresScreen(onBack: () -> Unit, onProducts: (String) -> Unit) {
                                 Text(s.name, style = MaterialTheme.typography.titleMedium)
                                 Text(
                                     categoryLabel(s.category) + " • " + (if (s.status == "active") "نشط" else "موقوف") + " • " + (if (s.isOpen) "مفتوح" else "مغلق"),
-                                    color = Color.Gray,
+                                    color = Mq.Muted,
                                 )
                             }
                         }
@@ -351,13 +352,13 @@ private fun StoreEditor(s: Store?, onClose: () -> Unit, onProducts: (String) -> 
             if (s != null) {
                 ActionButton("منتجات هذا المتجر", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true) { onProducts(s.id) }
                 Section("دعوة تاجر لهذا المتجر") {
-                    Text("اكتب بريد Gmail الخاص بالتاجر. عند أول دخول له بهذا البريد يصبح تاجرًا لهذا المتجر.", color = Color.Gray)
+                    Text("اكتب بريد Gmail الخاص بالتاجر. عند أول دخول له بهذا البريد يصبح تاجرًا لهذا المتجر.", color = Mq.Muted)
                     Field("بريد التاجر", email, { email = it; invited = false }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Email)
                     ActionButton("إرسال الدعوة", Modifier.fillMaxWidth().padding(top = 8.dp), enabled = email.contains("@")) {
                         Api.adminInvite(email.trim().lowercase(), "merchant", s.id)
                         invited = true
                     }
-                    if (invited) Text("تم تسجيل الدعوة.", color = Color(0xFF166534))
+                    if (invited) Text("تم تسجيل الدعوة.", color = Mq.Green)
                 }
             }
         }
@@ -383,14 +384,14 @@ fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
                             Api.adminInvite(email.trim().lowercase(), role, null)
                             invited = true
                         }
-                        if (invited) Text("تم تسجيل الدعوة. تُفعَّل عند أول دخول بهذا البريد.", color = Color(0xFF166534))
+                        if (invited) Text("تم تسجيل الدعوة. تُفعَّل عند أول دخول بهذا البريد.", color = Mq.Green)
                     }
                 }
                 items(list.sortedBy { it.role }, key = { it.uid }) { u ->
                     MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
                         Column(Modifier.padding(14.dp)) {
                             Text(u.name.ifBlank { u.email }, style = MaterialTheme.typography.titleMedium)
-                            Text(u.email, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            Text(u.email, color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                             Text(roleLabel(u.role) + " • " + (if (u.status == "active") "نشط" else "موقوف") + (if (u.isTestAccount) " • تجريبي" else ""))
                             if (u.uid != profile.uid) {
                                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -438,7 +439,7 @@ private fun SettingsForm(s: Settings) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Section("رسوم التوصيل") {
             Field("رسوم التوصيل (جنيه)", fee, { fee = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
-            Text("تسري على الطلبات الجديدة فقط. الطلبات الحالية تحتفظ برسومها.", color = Color.Gray)
+            Text("تسري على الطلبات الجديدة فقط. الطلبات الحالية تحتفظ برسومها.", color = Mq.Muted)
         }
         Section("المهل بالدقائق") {
             Field("مهلة مراجعة التاجر", merchantMin, { merchantMin = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
@@ -447,7 +448,7 @@ private fun SettingsForm(s: Settings) {
         }
         Section("سقف الطلبات المفتوحة لكل زبون") {
             Field("أقصى عدد (1 إلى 20)", maxOpen, { maxOpen = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
-            Text("يمنع زبونًا واحدًا من إغراق المتاجر بطلبات مفتوحة. يُحتسب كل طلب لم يُسلَّم أو يُلغَ بعد.", color = Color.Gray)
+            Text("يمنع زبونًا واحدًا من إغراق المتاجر بطلبات مفتوحة. يُحتسب كل طلب لم يُسلَّم أو يُلغَ بعد.", color = Mq.Muted)
         }
         Section("استقبال الطلبات") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -458,7 +459,7 @@ private fun SettingsForm(s: Settings) {
             Api.adminUpdateSettings(Settings(feeV ?: 0, mV ?: 15, cV ?: 30, enabled, oV ?: 3))
             saved = true
         }
-        if (saved) Text("تم الحفظ.", modifier = Modifier.padding(16.dp), color = Color(0xFF166534))
+        if (saved) Text("تم الحفظ.", modifier = Modifier.padding(16.dp), color = Mq.Green)
     }
 }
 
@@ -474,8 +475,8 @@ fun AuditScreen(onBack: () -> Unit) {
                     items(list, key = { it.id }) { a ->
                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                             Text(a.action, style = MaterialTheme.typography.titleMedium)
-                            Text("${a.actorRole} • ${a.targetType}: ${a.targetId}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                            Text(dateTime(a.at), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            Text("${a.actorRole} • ${a.targetType}: ${a.targetId}", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+                            Text(dateTime(a.at), color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -509,14 +510,14 @@ fun ExpensesScreen(onBack: () -> Unit) {
             }
             LoadableView(expenses) { list ->
                 Section("آخر المصروفات") {
-                    if (list.isEmpty()) Text("لا توجد مصروفات.", color = Color.Gray)
+                    if (list.isEmpty()) Text("لا توجد مصروفات.", color = Mq.Muted)
                     list.forEach { e ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             Column(Modifier.weight(1f)) {
                                 Text(e.category)
-                                Text(dateTime(e.createdAt), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                Text(dateTime(e.createdAt), color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                             }
-                            Text(money(e.amount), color = Color(0xFFB91C1C))
+                            Text(money(e.amount), color = Mq.Red)
                         }
                     }
                 }
@@ -540,7 +541,7 @@ fun ExportScreen(onBack: () -> Unit) {
             Section("الفترة (بصيغة 2026-10-24)") {
                 Field("من تاريخ", from, { from = it }, keyboard = KeyboardType.Ascii)
                 Field("إلى تاريخ", to, { to = it }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Ascii)
-                Text("يشمل التقرير كل القيود المالية في الفترة (حتى 5000 قيد).", color = Color.Gray, modifier = Modifier.padding(top = 6.dp))
+                Text("يشمل التقرير كل القيود المالية في الفترة (حتى 5000 قيد).", color = Mq.Muted, modifier = Modifier.padding(top = 6.dp))
             }
             ActionButton("عرض ملخص الفترة", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true, enabled = a != null && b != null) {
                 summary = Api.adminSummary(a!!, b!!)
@@ -552,7 +553,7 @@ fun ExportScreen(onBack: () -> Unit) {
                     InfoRow("الصافي (إيراد − مصروفات)", money(sm.netRevenue), bold = true)
                     InfoRow("حركة النقد (محصَّل − مدفوع للمتاجر)", money(sm.cashNet))
                     InfoRow("صافي مستحقات المتاجر في الفترة", money(sm.storePayableNet))
-                    Text("مستحقات المتاجر ليست ربحًا للمنصة. الصافي أعلاه من إيراد التوصيل فقط.", color = Color.Gray)
+                    Text("مستحقات المتاجر ليست ربحًا للمنصة. الصافي أعلاه من إيراد التوصيل فقط.", color = Mq.Muted)
                 }
             }
             ActionButton("تصدير ومشاركة", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), enabled = a != null && b != null) {

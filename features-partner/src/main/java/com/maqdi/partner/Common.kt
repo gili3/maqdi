@@ -1,5 +1,6 @@
 package com.maqdi.partner
 
+import com.maqdi.core.Mq
 import com.maqdi.core.MqCard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -49,8 +50,8 @@ fun PartnerOrderRow(o: Order, showStore: Boolean, onOpen: (String) -> Unit) {
                 StatusChip(o.status)
             }
             Text((if (o.totalsAreEstimate) "تقريبي: " else "") + money(o.total), color = MaterialTheme.colorScheme.primary)
-            Text(o.address, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-            Text(dateTime(o.createdAt) + if (o.isTest) " • تجريبي" else "", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            Text(o.address, color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+            Text(dateTime(o.createdAt) + if (o.isTest) " • تجريبي" else "", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

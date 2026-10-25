@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.maqdi.core.Mq
 import com.maqdi.core.ActionButton
 import com.maqdi.core.Api
 import com.maqdi.core.Empty
@@ -62,7 +63,7 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(l.product.name, style = MaterialTheme.typography.titleMedium)
-                                Text(money(l.product.price * l.qty), color = Color.Gray)
+                                Text(money(l.product.price * l.qty), color = Mq.Muted)
                             }
                             Stepper(l.qty, { Cart.set(l.product, Cart.storeName, it) }, min = 0,
                                 max = minOf(99L, l.product.stockQty ?: 99L).toInt())
@@ -75,7 +76,7 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
                     InfoRow("المبلغ التقريبي", money(itemsTotal + settings.deliveryFee), bold = true)
                     Text(
                         "التاجر سيراجع التوفر والأسعار، ثم يصلك الإجمالي النهائي لتوافق عليه قبل بدء التجهيز. الدفع نقدًا عند الاستلام.",
-                        style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(top = 6.dp),
+                        style = MaterialTheme.typography.bodySmall, color = Mq.Muted, modifier = Modifier.padding(top = 6.dp),
                     )
                 }
                 Section("بيانات التوصيل") {

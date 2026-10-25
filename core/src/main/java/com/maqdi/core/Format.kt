@@ -1,6 +1,20 @@
 package com.maqdi.core
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.PendingActions
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.TimerOff
+import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -32,11 +46,30 @@ object St {
     )
     fun label(s: String) = labels[s] ?: s
 
+    /** ألوان دلالية: رمادي=انتظار التاجر، كهرماني=يحتاج قرار الزبون، أخضر=موافقة/نجاح، بنفسجي=تجهيز، فيروزي=جاهز، أزرق=في الطريق، أحمر=فشل */
+    @Composable
     fun color(s: String): Color = when (s) {
-        DELIVERED -> Color(0xFF166534)
-        REJECTED, CANCELLED, EXPIRED, FAILED -> Color(0xFFB91C1C)
-        AWAITING -> Color(0xFFB45309)
-        else -> Color(0xFF1D4ED8)
+        PENDING -> Mq.Muted
+        AWAITING -> Mq.Amber
+        CONFIRMED, DELIVERED -> Mq.Green
+        PREPARING -> Mq.Violet
+        READY -> Mq.Teal
+        OUT -> Mq.Blue
+        else -> Mq.Red
+    }
+
+    fun icon(s: String): ImageVector = when (s) {
+        PENDING -> Icons.Default.HourglassTop
+        AWAITING -> Icons.Default.PendingActions
+        CONFIRMED -> Icons.Default.CheckCircle
+        PREPARING -> Icons.Default.Inventory2
+        READY -> Icons.Default.Storefront
+        OUT -> Icons.Default.LocalShipping
+        DELIVERED -> Icons.Default.TaskAlt
+        REJECTED -> Icons.Default.Cancel
+        CANCELLED -> Icons.Default.Block
+        EXPIRED -> Icons.Default.TimerOff
+        else -> Icons.Default.ReportProblem
     }
 }
 

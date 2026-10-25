@@ -34,6 +34,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,18 +45,47 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-/** ألوان النظام البصري الموحّد للتطبيقات الأربعة */
+/** لوحة الهوية البصرية الموحّدة (فاتح/داكن). الأساسي زمردي #087F5B والمساعد #20B486 */
+@Immutable
+class MqPalette(
+    val primary: Color, val onPrimary: Color, val primaryContainer: Color, val onPrimaryContainer: Color,
+    val secondary: Color, val bg: Color, val card: Color, val ink: Color, val muted: Color,
+    val line: Color, val chip: Color, val red: Color, val amber: Color, val blue: Color,
+    val violet: Color, val teal: Color, val dark: Boolean,
+)
+
+val MqLight = MqPalette(
+    primary = Color(0xFF087F5B), onPrimary = Color.White, primaryContainer = Color(0xFFD3F0E4), onPrimaryContainer = Color(0xFF04402D),
+    secondary = Color(0xFF20B486), bg = Color(0xFFF5F8F6), card = Color.White, ink = Color(0xFF202923), muted = Color(0xFF58675E),
+    line = Color(0xFFDCE5DF), chip = Color(0xFFE8EFEB), red = Color(0xFFB42318), amber = Color(0xFFB45309), blue = Color(0xFF1D4ED8),
+    violet = Color(0xFF6D4FD6), teal = Color(0xFF0E7490), dark = false,
+)
+
+val MqDark = MqPalette(
+    primary = Color(0xFF20B486), onPrimary = Color(0xFF04261B), primaryContainer = Color(0xFF0B4A38), onPrimaryContainer = Color(0xFFBFF0DC),
+    secondary = Color(0xFF4FD1A5), bg = Color(0xFF0F1512), card = Color(0xFF18211C), ink = Color(0xFFE6EEE9), muted = Color(0xFF9DB0A5),
+    line = Color(0xFF2A3731), chip = Color(0xFF212D26), red = Color(0xFFF87171), amber = Color(0xFFFBBF24), blue = Color(0xFF7AA2FF),
+    violet = Color(0xFFA79BFF), teal = Color(0xFF67D6EE), dark = true,
+)
+
+val LocalMq = staticCompositionLocalOf { MqLight }
+
+/** الوصول للألوان من أي شاشة: تتبدّل تلقائيًا مع الوضع الداكن */
 object Mq {
-    val Green = Color(0xFF166534)
-    val GreenSoft = Color(0xFFDCFCE7)
-    val Amber = Color(0xFFB45309)
-    val Red = Color(0xFFB91C1C)
-    val Blue = Color(0xFF1D4ED8)
-    val Bg = Color(0xFFF7F7F5)
-    val Ink = Color(0xFF1C1917)
-    val Muted = Color(0xFF78716C)
-    val Line = Color(0xFFE7E5E4)
-    val Chip = Color(0xFFF1F0EE)
+    val Green: Color @Composable @ReadOnlyComposable get() = LocalMq.current.primary
+    val GreenSoft: Color @Composable @ReadOnlyComposable get() = LocalMq.current.primaryContainer
+    val Accent: Color @Composable @ReadOnlyComposable get() = LocalMq.current.secondary
+    val Amber: Color @Composable @ReadOnlyComposable get() = LocalMq.current.amber
+    val Red: Color @Composable @ReadOnlyComposable get() = LocalMq.current.red
+    val Blue: Color @Composable @ReadOnlyComposable get() = LocalMq.current.blue
+    val Violet: Color @Composable @ReadOnlyComposable get() = LocalMq.current.violet
+    val Teal: Color @Composable @ReadOnlyComposable get() = LocalMq.current.teal
+    val Bg: Color @Composable @ReadOnlyComposable get() = LocalMq.current.bg
+    val Card: Color @Composable @ReadOnlyComposable get() = LocalMq.current.card
+    val Ink: Color @Composable @ReadOnlyComposable get() = LocalMq.current.ink
+    val Muted: Color @Composable @ReadOnlyComposable get() = LocalMq.current.muted
+    val Line: Color @Composable @ReadOnlyComposable get() = LocalMq.current.line
+    val Chip: Color @Composable @ReadOnlyComposable get() = LocalMq.current.chip
 }
 
 /** بطاقة موحّدة: زوايا مدوّرة وحدّ خفيف بدل اللون الأبيض الصريح */
@@ -66,7 +98,7 @@ fun MqCard(
     val m = if (onClick != null) modifier.clickable(onClick = onClick) else modifier
     Card(
         modifier = m, shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = Mq.Card),
         border = BorderStroke(1.dp, Mq.Line), content = content,
     )
 }
@@ -133,7 +165,7 @@ fun SearchField(value: String, onChange: (String) -> Unit, placeholder: String, 
             }
         },
         shape = RoundedCornerShape(28.dp),
-        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Mq.Card, focusedContainerColor = Mq.Card),
     )
 }
 

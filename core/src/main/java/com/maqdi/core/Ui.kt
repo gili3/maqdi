@@ -38,7 +38,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -73,14 +77,17 @@ import kotlinx.coroutines.tasks.await
 
 // ---------- السمة (عربية RTL، خط كبير) ----------
 @Composable
-fun MaqdiTheme(content: @Composable () -> Unit) {
-    val colors = lightColorScheme(
-        primary = Mq.Green, onPrimary = Color.White,
-        primaryContainer = Mq.GreenSoft, onPrimaryContainer = Color(0xFF052E16),
-        secondary = Mq.Amber, secondaryContainer = Color(0xFFFEF3C7), onSecondaryContainer = Color(0xFF451A03),
-        background = Mq.Bg, onBackground = Mq.Ink, surface = Color.White, onSurface = Mq.Ink,
-        surfaceVariant = Mq.Chip, onSurfaceVariant = Mq.Muted, outline = Mq.Line, outlineVariant = Mq.Line,
-        error = Mq.Red,
+fun MaqdiTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    val m = if (dark) MqDark else MqLight
+    val base = if (dark) darkColorScheme() else lightColorScheme()
+    val colors = base.copy(
+        primary = m.primary, onPrimary = m.onPrimary, primaryContainer = m.primaryContainer, onPrimaryContainer = m.onPrimaryContainer,
+        secondary = m.secondary, onSecondary = m.onPrimary, secondaryContainer = m.primaryContainer, onSecondaryContainer = m.onPrimaryContainer,
+        background = m.bg, onBackground = m.ink, surface = m.card, onSurface = m.ink,
+        surfaceVariant = m.chip, onSurfaceVariant = m.muted, outline = m.line, outlineVariant = m.line,
+        surfaceTint = m.primary, error = m.red, onError = if (dark) Color(0xFF3B0A0A) else Color.White,
+        surfaceContainerLowest = m.card, surfaceContainerLow = m.card, surfaceContainer = m.card,
+        surfaceContainerHigh = m.chip, surfaceContainerHighest = m.chip,
     )
     val shapes = androidx.compose.material3.Shapes(
         small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(16.dp), large = RoundedCornerShape(22.dp),
@@ -93,7 +100,7 @@ fun MaqdiTheme(content: @Composable () -> Unit) {
         titleMedium = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
         labelLarge = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium),
     )
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, LocalMq provides m) {
         MaterialTheme(colorScheme = colors, typography = typo, shapes = shapes) {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
         }
@@ -121,6 +128,10 @@ fun Screen(
                     actions()
                     if (onBack == null) BellAction()
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary, titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary, actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
             )
         },
         bottomBar = bottomBar,
@@ -258,11 +269,12 @@ fun Field(
 @Composable
 fun StatusChip(status: String) {
     val c = St.color(status)
-    Surface(color = c.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-        Text(
-            St.label(status), color = c, style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-        )
+    Surface(color = c.copy(alpha = 0.14f), shape = RoundedCornerShape(50)) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(St.icon(status), contentDescription = null, tint = c, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(St.label(status), color = c, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
@@ -280,7 +292,7 @@ fun StatusSteps(status: String) {
 @Composable
 fun InfoRow(label: String, value: String, bold: Boolean = false) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.Gray)
+        Text(label, color = Mq.Muted)
         Spacer(Modifier.width(12.dp))
         Text(value, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, textAlign = TextAlign.End)
     }
@@ -345,9 +357,9 @@ private val urlCache = mutableMapOf<String, String>()
 
 @Composable
 fun StorageImage(path: String?, modifier: Modifier = Modifier) {
-    val placeholder = Modifier.background(Color(0xFFE7E5E4))
+    val placeholder = Modifier.background(Mq.Chip)
     if (path.isNullOrBlank()) {
-        Box(modifier.then(placeholder), contentAlignment = Alignment.Center) { Text("🛒") }
+        Box(modifier.then(placeholder), contentAlignment = Alignment.Center) { Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Mq.Muted) }
     } else {
         val url by produceState<String?>(initialValue = urlCache[path], path) {
             if (value == null) {

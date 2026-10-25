@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.maqdi.core.Mq
 import com.maqdi.core.ActionButton
 import com.maqdi.core.Api
 import com.maqdi.core.ApiException
@@ -96,7 +97,7 @@ fun ProductsManager(storeId: String, onBack: (() -> Unit)?) {
                                     Text(money(p.price), color = MaterialTheme.colorScheme.primary)
                                     Text(
                                         (if (p.isAvailable) "متوفر" else "غير متوفر") + (p.stockQty?.let { " • الكمية: $it" } ?: ""),
-                                        color = if (p.isAvailable) Color.Gray else Color(0xFFB91C1C),
+                                        color = if (p.isAvailable) Mq.Muted else Mq.Red,
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                 }
@@ -154,7 +155,7 @@ private fun ProductEditor(storeId: String, p: Product?, onClose: () -> Unit) {
                 ActionButton(if (uploading) "جارٍ الرفع..." else "اختيار صورة", Modifier.fillMaxWidth().padding(top = 8.dp), tonal = true, enabled = !uploading) {
                     pick.launch("image/*")
                 }
-                Text("تُصغَّر الصورة وتُضغط تلقائيًا لتوفير البيانات.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                Text("تُصغَّر الصورة وتُضغط تلقائيًا لتوفير البيانات.", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                 uploadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
             Section("البيانات") {
@@ -202,9 +203,9 @@ fun StoreAccountScreen(storeId: String, name: String) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(entryTypeLabel(e.type))
-                                Text(dateTime(e.createdAt), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                Text(dateTime(e.createdAt), color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                             }
-                            Text(money(e.amount), color = if (e.amount < 0) Color(0xFFB91C1C) else Color(0xFF166534))
+                            Text(money(e.amount), color = if (e.amount < 0) Mq.Red else Mq.Green)
                         }
                     }
                 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.maqdi.core.Mq
 import com.maqdi.core.ActionButton
 import com.maqdi.core.Api
 import com.maqdi.core.ApiException
@@ -132,9 +133,9 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
             o.locationNote?.let { InfoRow("وصف الموقع", it) }
             InfoRow("وقت الطلب", dateTime(o.createdAt))
             o.courierName?.let { InfoRow("الموصّل", it) }
-            o.rejectReason?.let { Text("سبب الرفض: $it", color = Color(0xFFB91C1C)) }
-            o.cancelReason?.let { Text("سبب الإلغاء: $it", color = Color(0xFFB91C1C)) }
-            o.failReason?.let { Text("سبب تعذّر التسليم: $it", color = Color(0xFFB91C1C)) }
+            o.rejectReason?.let { Text("سبب الرفض: $it", color = Mq.Red) }
+            o.cancelReason?.let { Text("سبب الإلغاء: $it", color = Mq.Red) }
+            o.failReason?.let { Text("سبب تعذّر التسليم: $it", color = Mq.Red) }
         }
         Section("المنتجات") {
             o.shownLines.forEach { l ->
@@ -218,7 +219,7 @@ private fun ReviewEditor(o: Order, onClose: () -> Unit) {
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Section("راجع التوفر والأسعار والكميات") {
-            Text("اجعل الكمية 0 لحذف منتج غير متوفر. أي تغيير يُرسل للزبون ليوافق عليه.", color = Color.Gray)
+            Text("اجعل الكمية 0 لحذف منتج غير متوفر. أي تغيير يُرسل للزبون ليوافق عليه.", color = Mq.Muted)
             lines.forEachIndexed { i, l ->
                 Column(Modifier.padding(vertical = 8.dp)) {
                     Text(l.name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)

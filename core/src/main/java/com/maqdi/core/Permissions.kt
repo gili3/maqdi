@@ -30,6 +30,12 @@ object Permissions {
         ),
     )
 
+    /** الصلاحيات القياسية عند التعيين (بلا تخصيص): المندوب الطلبات فقط، والتاجر متجره فقط */
+    val presets: Map<String, List<String>> = mapOf(
+        "courier" to listOf("deliveries"),
+        "merchant" to listOf("orders", "products", "open_close"),
+    )
+
     fun all(role: String): List<String> = catalog[role].orEmpty().map { it.first }
 
     /** null = كل صلاحيات الدور */

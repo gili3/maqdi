@@ -497,26 +497,6 @@ private fun CategoryDialog(c: Category?, nextOrder: Long, onDismiss: () -> Unit)
 /** صلاحيات الأدمن التي لا تُحدَّد افتراضيًا عند المنح (تصعيد حساس: يُؤشَّر عليها عمدًا) */
 private val SENSITIVE_ADMIN = setOf("permissions", "grant_admin")
 
-/** قائمة مربعات اختيار الصلاحيات. enabledKeys = ما يملكه المانح فقط (null = الكل متاح) */
-@Composable
-private fun PermissionChecklist(
-    items: List<Pair<String, String>>, selected: Set<String>, enabledKeys: Set<String>? = null, onChange: (Set<String>) -> Unit,
-) {
-    items.forEach { (key, label) ->
-        val on = enabledKeys == null || key in enabledKeys
-        Row(
-            Modifier.fillMaxWidth().clickable(enabled = on) { onChange(if (key in selected) selected - key else selected + key) },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(checked = key in selected, enabled = on, onCheckedChange = { onChange(if (it) selected + key else selected - key) })
-            Text(label, color = if (on) MaterialTheme.colorScheme.onSurface else Mq.Muted)
-        }
-    }
-    if (enabledKeys != null && items.any { it.first !in enabledKeys }) {
-        Text("الخيارات الباهتة لا تملكها أنت، فلا يمكنك منحها.", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
-    }
-}
-
 @Composable
 fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
     val users = rememberLoadable { Repo.users() }
@@ -568,8 +548,8 @@ private fun UserCard(u: UserRow, isMe: Boolean, storeLabel: String?, onClick: ()
 }
 
 /**
- * تعديل مستخدم مسجّل: اختيار الدور (مندوب / تاجر / مدير) ثم الصلاحيات.
- * الافتراضي صلاحيات الدور كاملة، والتخصيص اختياري؛ المدير يُظهر القائمة دائمًا (منح حساس).
+ * تعديل مستخدم مسجّل: اختيار الدور فقط (مندوب / تاجر / مدير)، والصلاحيات قياسية بلا تخصيص:
+ * المندوب الطلبات فقط، والتاجر متجره فقط، والمدير كل الإدارة عدا منح الأدمن وتخصيص الصلاحيات.
  */
 @Composable
 private fun RoleDialog(u: UserRow, actor: Profile, stores: List<Store>, onDismiss: () -> Unit) {
@@ -581,20 +561,20 @@ private fun RoleDialog(u: UserRow, actor: Profile, stores: List<Store>, onDismis
         if (canGrant) add("admin" to "مدير")
         if (u.role != "customer" && none { it.first == u.role }) add(u.role to roleLabel(u.role))
     }
-    fun existingSel(): Set<String> = Permissions.all(u.role).let { all -> (u.permissions ?: all).filter { it in all }.toSet() }
-    fun defaultSel(r: String): Set<String> =
-        if (r == "admin") Permissions.all("admin").filter { actor.can(it) }.toSet() - SENSITIVE_ADMIN else Permissions.all(r).toSet()
-
     var role by remember { mutableStateOf(if (u.role == "customer") "" else u.role) }
     var storeId by remember { mutableStateOf(u.storeId) }
-    var selected by remember { mutableStateOf(if (u.role == "customer") emptySet() else existingSel()) }
-    var custom by remember { mutableStateOf(u.role != "customer" && u.role != "admin" && u.permissions != null) }
     var confirmRevoke by remember { mutableStateOf(false) }
 
-    val catalog = Permissions.catalog[role].orEmpty()
-    val allKeys = catalog.map { it.first }
-    val needsList = role == "admin" || custom
-    val valid = role.isNotEmpty() && (role != "merchant" || storeId != null) && (!needsList || selected.isNotEmpty())
+    val adminPerms = Permissions.all("admin").filter { actor.can(it) && it !in SENSITIVE_ADMIN }
+    val note = when (role) {
+        "courier" -> "المندوب: الطلبات (استلام وتسليم) فقط."
+        "merchant" -> "التاجر: متجره فقط (طلباته ومنتجاته وفتحه وإغلاقه)."
+        "admin" -> "المدير: كل أقسام الإدارة عدا منح الأدمن وتخصيص الصلاحيات."
+        else -> ""
+    }
+    // مدير قائم لا يحتاج حفظًا (لا تخصيص)؛ يبقى له السحب والإيقاف
+    val valid = role.isNotEmpty() && (role != "merchant" || storeId != null) && !(role == "admin" && u.role == "admin") &&
+        (role != "admin" || adminPerms.isNotEmpty())
 
     if (confirmRevoke) {
         com.maqdi.core.ConfirmDialog(
@@ -615,46 +595,24 @@ private fun RoleDialog(u: UserRow, actor: Profile, stores: List<Store>, onDismis
                 if (options.isEmpty()) {
                     Text("لا تملك صلاحية تغيير الأدوار.", color = Mq.Muted)
                 } else {
-                    ChipRow(options, role) { r ->
-                        role = r
-                        selected = if (r == u.role) existingSel() else defaultSel(r)
-                        custom = r == u.role && r != "admin" && u.permissions != null
-                    }
+                    ChipRow(options, role) { role = it }
                     if (role == "merchant") {
                         Text("متجر التاجر", style = MaterialTheme.typography.labelLarge)
                         if (stores.isEmpty()) Text("لا توجد متاجر بعد. أنشئ متجرًا أولًا.", color = Mq.Muted)
                         else ChipRow(stores.sortedBy { it.name }.map { it.id to it.name }, storeId ?: "") { storeId = it }
                     }
-                    if (role.isNotEmpty()) {
-                        if (needsList) {
-                            val enabled: Set<String>? = if (role == "admin") allKeys.filter { actor.can(it) }.toSet() else null
-                            PermissionChecklist(catalog, selected, enabledKeys = enabled) { selected = it }
-                        } else {
-                            Text("صلاحيات كاملة لدور " + roleLabel(role) + ".", color = Mq.Muted)
-                        }
-                        if (canPerms && role != "admin") {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("تخصيص الصلاحيات")
-                                Switch(checked = custom, onCheckedChange = { custom = it; if (!it) selected = allKeys.toSet() })
-                            }
-                        }
-                        ActionButton("حفظ", Modifier.fillMaxWidth().padding(top = 8.dp), enabled = valid) {
-                            val list = allKeys.filter { it in selected }
+                    if (note.isNotEmpty()) Text(note, color = Mq.Muted)
+                    if (valid) {
+                        ActionButton("حفظ", Modifier.fillMaxWidth().padding(top = 8.dp)) {
                             if (role == "admin") {
-                                if (u.role == "admin") Api.adminSetPermissions(u.uid, if (selected.containsAll(allKeys)) null else list)
-                                else Api.adminGrantAdmin(u.uid, list)
+                                Api.adminGrantAdmin(u.uid, adminPerms)
                             } else {
-                                val perms: List<String>? = if (custom && !selected.containsAll(allKeys)) list else null
-                                val sameRole = u.role == role && (role != "merchant" || u.storeId == storeId)
-                                if (sameRole) {
-                                    if (canPerms) Api.adminSetPermissions(u.uid, perms)
-                                } else {
-                                    if (u.role == "admin") Api.adminRevokeAdmin(u.uid)
-                                    Api.adminInvite(
-                                        u.email.trim().lowercase(), role, if (role == "merchant") storeId else null,
-                                        permissions = perms, customizePermissions = canPerms,
-                                    )
-                                }
+                                if (u.role == "admin") Api.adminRevokeAdmin(u.uid)
+                                // قائمة صريحة (لا null) كي لا يرث الحساب صلاحيات تُضاف مستقبلًا؛ تحديدها يتطلب صلاحية «permissions»
+                                Api.adminInvite(
+                                    u.email.trim().lowercase(), role, if (role == "merchant") storeId else null,
+                                    permissions = if (canPerms) Permissions.presets[role] else null, customizePermissions = canPerms,
+                                )
                             }
                             onDismiss()
                         }

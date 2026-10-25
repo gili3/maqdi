@@ -244,6 +244,33 @@ export const adminExportFinancialCsv = callable(async (req) => {
   return { csv: lines.join("\n"), rows: snap.size, truncated: snap.size === 5000 };
 });
 
+// ---------- ملخص مالي لفترة ----------
+export const adminFinanceSummary = callable(async (req) => {
+  const d = obj(req.data);
+  const from = new Date(str(d.from, "from", 8, 40));
+  const to = new Date(str(d.to, "to", 8, 40));
+  if (isNaN(from.getTime()) || isNaN(to.getTime()) || to <= from) throw new HttpsError("invalid-argument", "invalid_range");
+  await loadActor(req, ["admin"]);
+  const f = Timestamp.fromDate(from);
+  const t = Timestamp.fromDate(to);
+
+  const sumLedger = async (ledger: Ledger) => {
+    const r = await db.collection("financial_entries")
+      .where("ledger", "==", ledger).where("createdAt", ">=", f).where("createdAt", "<", t)
+      .aggregate({ total: AggregateField.sum("amount") }).get();
+    return (r.data().total as number | null) ?? 0;
+  };
+  const exp = await db.collection("expenses")
+    .where("createdAt", ">=", f).where("createdAt", "<", t)
+    .aggregate({ total: AggregateField.sum("amount") }).get();
+
+  const [deliveryRevenue, cashNet, storePayableNet] = await Promise.all([
+    sumLedger("delivery_revenue"), sumLedger("cash"), sumLedger("store_payable"),
+  ]);
+  const expenses = (exp.data().total as number | null) ?? 0;
+  return { deliveryRevenue, cashNet, storePayableNet, expenses, netRevenue: deliveryRevenue - expenses };
+});
+
 // ---------- لوحة الإحصائيات ----------
 export const adminDashboard = callable(async (req) => {
   await loadActor(req, ["admin"]);

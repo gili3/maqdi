@@ -3,6 +3,9 @@ lib/
 *.log
 .firebase/
 local.properties
-*.jks
-*.keystore
+build/
+.gradle/
+.idea/
+*.apk
+release.jks
 service-account*.json

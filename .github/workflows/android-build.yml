@@ -1,0 +1,51 @@
+name: Android Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "app-customer/**"
+      - "app-partner/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "keystore/**"
+      - ".github/workflows/android-build.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Check google-services.json files
+        run: |
+          for app in app-customer app-partner; do
+            if [ ! -f "$app/google-services.json" ]; then
+              echo "::error::الملف $app/google-services.json غير موجود. نزّله من Firebase وضعه في هذا المجلد."
+              exit 1
+            fi
+          done
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Build debug APKs
+        run: gradle :app-customer:assembleDebug :app-partner:assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maqdi-customer-apk
+          path: app-customer/build/outputs/apk/debug/*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maqdi-partner-apk
+          path: app-partner/build/outputs/apk/debug/*.apk

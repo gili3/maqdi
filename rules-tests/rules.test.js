@@ -29,7 +29,8 @@ test.after(async () => { await env.cleanup(); });
 test.beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
-    const db = ctx.firestore();
+    const adb = ctx.firestore();
+    const db = adb;
     for (const [uid, u] of Object.entries(USERS)) await setDoc(doc(db, "users", uid), u);
     await setDoc(doc(db, "stores/s1"), { name: "بقالة 1", status: "active", isOpen: true });
     await setDoc(doc(db, "products/p1"), { storeId: "s1", name: "سكر", price: 1000, isAvailable: true });
@@ -136,8 +137,9 @@ test("الإشعارات: يقرأ إشعاراته ويعلّمها مقروء�
 
 test("الموصّل يقرأ سجل توصيلاته فقط", async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), "orders/o3"), { customerId: "c2", storeId: "s2", status: "delivered", courierUid: "k1" });
-    await setDoc(doc(ctx.firestore(), "orders/o4"), { customerId: "c2", storeId: "s2", status: "delivered", courierUid: "other" });
+    const adb = ctx.firestore();
+    await setDoc(doc(adb, "orders/o3"), { customerId: "c2", storeId: "s2", status: "delivered", courierUid: "k1" });
+    await setDoc(doc(adb, "orders/o4"), { customerId: "c2", storeId: "s2", status: "delivered", courierUid: "other" });
   });
   await assertSucceeds(getDoc(doc(as("k1"), "orders/o3")));
   await assertFails(getDoc(doc(as("k1"), "orders/o4")));
@@ -145,8 +147,9 @@ test("الموصّل يقرأ سجل توصيلاته فقط", async () => {
 
 test("الموصّل لا يرى توصيلات غيره الجارية، ويرى الجاهزة وتوصيلاته هو", async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), "orders/o5"), { customerId: "c2", storeId: "s2", status: "out_for_delivery", courierUid: "other" });
-    await setDoc(doc(ctx.firestore(), "orders/o6"), { customerId: "c2", storeId: "s2", status: "out_for_delivery", courierUid: "k1" });
+    const adb = ctx.firestore();
+    await setDoc(doc(adb, "orders/o5"), { customerId: "c2", storeId: "s2", status: "out_for_delivery", courierUid: "other" });
+    await setDoc(doc(adb, "orders/o6"), { customerId: "c2", storeId: "s2", status: "out_for_delivery", courierUid: "k1" });
   });
   await assertFails(getDoc(doc(as("k1"), "orders/o5")));
   await assertSucceeds(getDoc(doc(as("k1"), "orders/o6")));

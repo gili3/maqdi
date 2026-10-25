@@ -10,6 +10,7 @@ object Permissions {
             "categories" to "فئات المتاجر",
             "users" to "المستخدمون (دعوة/إيقاف)",
             "permissions" to "تخصيص صلاحيات الآخرين",
+            "grant_admin" to "منح وسحب صلاحية أدمن",
             "finance" to "المالية والتسويات والتصدير",
             "expenses" to "المصروفات",
             "settings" to "رسوم التوصيل والمُهَل",

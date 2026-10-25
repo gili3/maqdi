@@ -1,5 +1,6 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, Transaction, getFirestore } from "firebase-admin/firestore";
+import * as logger from "firebase-functions/logger";
 import { CallableRequest, HttpsError, onCall } from "firebase-functions/v2/https";
 import { DEFAULT_SETTINGS, REGION, Role } from "./config";
 import { effectivePermissions } from "./permissions";
@@ -135,4 +136,17 @@ export function writeAudit(
     details,
     at: FieldValue.serverTimestamp(),
   });
+}
+
+/**
+ * ينفّذ جزءًا غير حرج من استجابة. إن فشل (مثل فهرس لم يجهز بعد) يُسجَّل الخطأ بنصه الكامل
+ * (يحوي رابط إنشاء الفهرس) ويرجع البديل، فلا تفشل الشاشة كلها بسبب رقم واحد.
+ */
+export async function safely<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<{ value: T; ok: boolean }> {
+  try {
+    return { value: await fn(), ok: true };
+  } catch (e) {
+    logger.error(`partial_failure:${label}`, e);
+    return { value: fallback, ok: false };
+  }
 }

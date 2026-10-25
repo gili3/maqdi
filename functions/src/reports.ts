@@ -2,7 +2,7 @@ import { Query, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { LOCAL_OFFSET_MS } from "./config";
 import { buildReport, DeliveredOrder } from "./reportLogic";
-import { callable, db, docId, loadActor, obj, str } from "./util";
+import { callable, db, docId, loadActor, obj, safely, str } from "./util";
 
 const MAX_ROWS = 3000;
 const MAX_DAYS = 92;
@@ -46,7 +46,7 @@ async function countStatus(status: string, from: Date, to: Date, storeId: string
 
 async function otherStatuses(from: Date, to: Date, storeId: string | null) {
   const names = ["rejected", "cancelled", "expired", "delivery_failed"];
-  const counts = await Promise.all(names.map((s) => countStatus(s, from, to, storeId, null)));
+  const counts = await Promise.all(names.map(async (s) => (await safely(`other_count:${s}`, () => countStatus(s, from, to, storeId, null), 0)).value));
   return Object.fromEntries(names.map((n, i) => [n, counts[i]]));
 }
 
@@ -86,6 +86,6 @@ export const courierReport = callable(async (req) => {
     totals: { orders: r.totals.orders, collected: r.totals.collected },
     byDay: r.byDay.map((x) => ({ day: x.day, orders: x.orders })),
     truncated,
-    failed: await countStatus("delivery_failed", from, to, null, actor.uid),
+    failed: (await safely("courier_failed_count", () => countStatus("delivery_failed", from, to, null, actor.uid), 0)).value,
   };
 });

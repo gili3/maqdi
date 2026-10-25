@@ -39,3 +39,18 @@ test("التحقق من قائمة الصلاحيات المرسلة", () => {
   assert.equal(validatePermissionList("courier", "deliveries"), null);
   assert.equal(validatePermissionList("merchant", [1]), null);
 });
+
+test("منح صلاحية الأدمن: كتالوج الأدمن يتضمن grant_admin وisSubset يمنع تجاوز صلاحيات المانح", () => {
+  const { isSubset, allPermissions } = require("../lib/permissions");
+  assert.ok(allPermissions("admin").includes("grant_admin"));
+  assert.ok(!allPermissions("merchant").includes("grant_admin"));
+  assert.equal(isSubset(["orders", "stores"], ["orders", "stores", "reports"]), true);
+  assert.equal(isSubset(["orders", "finance"], ["orders", "stores"]), false);
+  assert.equal(isSubset([], ["orders"]), true);
+});
+
+test("قائمة صلاحيات تاجر محدّدة وقت الإنشاء تُقبل، وصلاحية إدارية تُرفض له", () => {
+  assert.deepEqual(validatePermissionList("merchant", ["orders", "products"]), ["orders", "products"]);
+  assert.equal(validatePermissionList("merchant", ["grant_admin"]), null);
+  assert.equal(validatePermissionList("merchant", ["finance"]), null);
+});

@@ -76,6 +76,9 @@ data class UserRow(
     val storeId: String?, val isTestAccount: Boolean, val permissions: List<String>? = null,
 )
 
+/** دعوة لم تُستعمل بعد (تُفعَّل عند أول دخول بهذا البريد) */
+data class Invite(val email: String, val role: String, val storeId: String?, val permissions: List<String>?)
+
 // ---------- التحويل من Firestore ----------
 private fun DocumentSnapshot.lng(f: String): Long = getLong(f) ?: 0L
 private fun DocumentSnapshot.time(f: String): Long? = getTimestamp(f)?.toDate()?.time
@@ -180,4 +183,8 @@ fun DocumentSnapshot.toUserRow() = UserRow(
     uid = id, email = getString("email") ?: "", name = getString("name") ?: "", role = getString("role") ?: "",
     status = getString("status") ?: "", storeId = getString("storeId"), isTestAccount = getBoolean("isTestAccount") ?: false,
     permissions = strList("permissions"),
+)
+
+fun DocumentSnapshot.toInvite() = Invite(
+    email = id, role = getString("role") ?: "", storeId = getString("storeId"), permissions = strList("permissions"),
 )

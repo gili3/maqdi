@@ -1,5 +1,6 @@
 package com.maqdi.partner
 
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -180,12 +181,17 @@ private fun ProductEditor(storeId: String, p: Product?, onClose: () -> Unit) {
 }
 
 @Composable
-fun StoreAccountScreen(storeId: String, name: String) {
+fun StoreAccountScreen(storeId: String, name: String, onProfile: (() -> Unit)? = null) {
     val bal = rememberLoadable(storeId) { Repo.balance(storeId) }
     val entries = rememberLoadable(storeId) { Repo.storeLedger(storeId) }
     val activity = LocalContext.current as android.app.Activity
     val scope = rememberCoroutineScope()
     Screen("حساب المتجر", actions = {
+        if (onProfile != null) {
+            androidx.compose.material3.IconButton(onClick = onProfile) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.AccountCircle, contentDescription = "الملف الشخصي")
+            }
+        }
         androidx.compose.material3.IconButton(onClick = { scope.launch { com.maqdi.core.signOutAll(activity) } }) {
             androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Logout, contentDescription = "تسجيل الخروج")
         }

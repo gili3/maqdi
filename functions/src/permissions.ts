@@ -2,7 +2,7 @@ import { Role } from "./config";
 
 // كتالوج الصلاحيات لكل دور. غياب الحقل `permissions` في ملف المستخدم = كل صلاحيات دوره (سلوك قديم محفوظ).
 export const PERMISSION_CATALOG: Record<string, readonly string[]> = {
-  admin: ["orders", "deliveries", "stores", "categories", "users", "permissions", "finance", "expenses", "settings", "reports", "audit"],
+  admin: ["orders", "deliveries", "stores", "categories", "users", "permissions", "grant_admin", "finance", "expenses", "settings", "reports", "audit"],
   merchant: ["orders", "products", "open_close", "reports", "balance"],
   courier: ["deliveries", "reports"],
 };
@@ -40,4 +40,9 @@ export function validatePermissionList(role: string, list: unknown): string[] | 
     if (!out.includes(p)) out.push(p);
   }
   return out;
+}
+
+/** هل كل عناصر `list` موجودة في `allowed`؟ (يمنع منح صلاحية لا يملكها المانح) */
+export function isSubset(list: readonly string[], allowed: readonly string[]): boolean {
+  return list.every((p) => allowed.includes(p));
 }

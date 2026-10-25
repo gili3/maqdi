@@ -44,6 +44,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 
 /** لوحة الهوية البصرية الموحّدة (فاتح/داكن). الأساسي زمردي #087F5B والمساعد #20B486 */
 @Immutable
@@ -195,5 +219,157 @@ fun BarChart(values: List<Pair<String, Long>>, modifier: Modifier = Modifier) {
                 Text(label, style = MaterialTheme.typography.bodySmall, color = Mq.Muted, maxLines = 1)
             }
         }
+    }
+}
+
+// ---------- التنقّل: الشريط السفلي والقائمة الجانبية ----------
+
+/** عنصر تنقّل مشترك بين الشريط السفلي والقائمة الجانبية. badge > 0 يُظهر شارة رقم */
+data class MqNavItem(val route: String, val label: String, val icon: ImageVector, val badge: Int = 0)
+
+/** قسم في القائمة الجانبية (العنوان اختياري) */
+data class MqDrawerSection(val title: String?, val items: List<MqNavItem>)
+
+/** شريط سفلي بزوايا علوية مدوّرة وظل، والعنصر المختار يظهر داخل حبّة متحركة اللون والعرض */
+@Composable
+fun MqBottomBar(items: List<MqNavItem>, selected: String?, onSelect: (String) -> Unit) {
+    Surface(
+        color = Mq.Card,
+        shadowElevation = 16.dp,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+        ) {
+            items.forEach { item ->
+                MqBottomItem(item, item.route == selected, Modifier.weight(1f)) { onSelect(item.route) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MqBottomItem(item: MqNavItem, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val pill by animateColorAsState(if (selected) Mq.GreenSoft else Color.Transparent, tween(250), label = "pill")
+    val pillWidth by animateDpAsState(if (selected) 60.dp else 36.dp, tween(250), label = "pillWidth")
+    val tint by animateColorAsState(if (selected) Mq.Green else Mq.Muted, tween(250), label = "tint")
+    val iconScale by animateFloatAsState(if (selected) 1.1f else 1f, tween(250), label = "iconScale")
+    Column(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Tab,
+                onClick = onClick,
+            )
+            .padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.width(pillWidth).height(32.dp).background(pill, RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            BadgedBox(badge = {
+                if (item.badge > 0) Badge { Text(if (item.badge > 9) "9+" else item.badge.toString()) }
+            }) {
+                Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp).scale(iconScale))
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            item.label, color = tint, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        )
+    }
+}
+
+/** محتوى القائمة الجانبية: ترويسة متدرّجة بالحساب، أقسام، ثم تسجيل الخروج */
+@Composable
+fun MqDrawerContent(
+    profile: Profile,
+    sections: List<MqDrawerSection>,
+    selected: String?,
+    onSelect: (String) -> Unit,
+    onSignOut: () -> Unit,
+) {
+    ModalDrawerSheet(
+        drawerContainerColor = Mq.Bg,
+        // الحافة الداخلية للقائمة: end تتبدّل تلقائيًا مع اتجاه RTL
+        drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp),
+    ) {
+        Box(
+            Modifier.fillMaxWidth()
+                .background(Brush.linearGradient(listOf(Mq.Green, Mq.Accent)))
+                .statusBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+        ) {
+            Column {
+                Box(
+                    Modifier.size(60.dp).background(Color.White.copy(alpha = 0.22f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        profile.name.ifBlank { profile.email }.trim().take(1),
+                        color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    profile.name.ifBlank { profile.email },
+                    color = Color.White, style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                )
+                Text(profile.email, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                Spacer(Modifier.height(8.dp))
+                Surface(color = Color.White.copy(alpha = 0.22f), shape = RoundedCornerShape(50)) {
+                    Text(
+                        roleLabel(profile.role), color = Color.White, style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
+                    )
+                }
+            }
+        }
+        val itemColors = NavigationDrawerItemDefaults.colors(
+            selectedContainerColor = Mq.GreenSoft,
+            selectedIconColor = Mq.Green,
+            selectedTextColor = Mq.Green,
+            unselectedContainerColor = Color.Transparent,
+            unselectedIconColor = Mq.Muted,
+            unselectedTextColor = Mq.Ink,
+        )
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+            sections.forEachIndexed { i, sec ->
+                if (i > 0) HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), color = Mq.Line)
+                if (sec.title != null) {
+                    Text(
+                        sec.title, color = Mq.Muted, style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 6.dp),
+                    )
+                }
+                sec.items.forEach { item ->
+                    NavigationDrawerItem(
+                        label = { Text(item.label) },
+                        selected = item.route == selected,
+                        onClick = { onSelect(item.route) },
+                        icon = { Icon(item.icon, contentDescription = null) },
+                        badge = { if (item.badge > 0) Text(item.badge.toString(), color = Mq.Green) },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                        colors = itemColors,
+                    )
+                }
+            }
+        }
+        HorizontalDivider(color = Mq.Line)
+        NavigationDrawerItem(
+            label = { Text("تسجيل الخروج") },
+            selected = false,
+            onClick = onSignOut,
+            icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding).padding(vertical = 4.dp),
+            colors = NavigationDrawerItemDefaults.colors(
+                unselectedContainerColor = Color.Transparent, unselectedIconColor = Mq.Red, unselectedTextColor = Mq.Red,
+            ),
+        )
     }
 }

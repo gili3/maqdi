@@ -49,6 +49,8 @@ import com.maqdi.core.Entry
 import com.maqdi.core.Field
 import com.maqdi.core.InfoRow
 import com.maqdi.core.Loadable
+import com.maqdi.core.ErrorBox
+import com.maqdi.core.ListSkeleton
 import com.maqdi.core.LoadableView
 import com.maqdi.core.Profile
 import com.maqdi.core.Repo
@@ -85,6 +87,7 @@ import com.maqdi.core.signOutAll
 import com.maqdi.core.todayKhartoum
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
@@ -96,8 +99,10 @@ private fun newKey() = UUID.randomUUID().toString().replace("-", "")
 fun DashboardScreen() {
     var data by remember { mutableStateOf<Api.Dashboard?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(tick) {
+        loading = true
         err = null
         try {
             data = Api.adminDashboard()
@@ -105,26 +110,37 @@ fun DashboardScreen() {
             throw e
         } catch (e: ApiException) {
             err = e.userMessage
+        } catch (e: Exception) {
+            err = "تعذّر تحميل اللوحة. أعد المحاولة."
+        } finally {
+            loading = false
         }
     }
     Screen("الرئيسية", actions = {
-        IconButton(onClick = { tick++ }) { Icon(Icons.Default.Refresh, contentDescription = "تحديث") }
+        IconButton(onClick = { tick++ }, enabled = !loading) { Icon(Icons.Default.Refresh, contentDescription = "تحديث") }
     }) { pad ->
-        Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            err?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
-            val d = data
-            if (d == null && err == null) Text("جارٍ التحميل...", modifier = Modifier.padding(16.dp))
-            if (d != null) {
+        val d = data
+        when {
+            // أول تحميل: هيكل نابض. الفشل بلا بيانات سابقة: رسالة وزر إعادة محاولة (لا شاشة معلّقة).
+            d == null && loading -> Column(Modifier.padding(pad)) { ListSkeleton() }
+            d == null -> Column(Modifier.padding(pad)) { ErrorBox(err ?: "تعذّر تحميل اللوحة.", onRetry = { tick++ }) }
+            else -> Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                // فشل التحديث مع بقاء بيانات سابقة: نُبقيها ونُنبّه
+                err?.let { Text("تعذّر التحديث: $it", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
+                if (d.partial) Text(
+                    "بعض الأرقام غير متاحة الآن (قد تكون الفهارس قيد الإنشاء). المعروض صحيح، والباقي يظهر بعد التحديث.",
+                    color = Mq.Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
                 Section("اليوم") {
-                    InfoRow("إيراد التوصيل", money(d.deliveryRevenueToday), bold = true)
-                    InfoRow("النقد المحصَّل", money(d.cashToday))
+                    InfoRow("إيراد التوصيل", d.deliveryRevenueToday?.let { money(it) } ?: "غير متاح", bold = true)
+                    InfoRow("النقد المحصَّل", d.cashToday?.let { money(it) } ?: "غير متاح")
                 }
                 Section("الطلبات حسب الحالة") {
                     St.all.forEach { s ->
                         val c = d.byStatus[s] ?: 0L
                         if (c > 0) InfoRow(St.label(s), c.toString())
                     }
-                    if (d.byStatus.values.all { it == 0L }) Text("لا توجد طلبات بعد.", color = Mq.Muted)
+                    if (d.byStatus.values.all { it == 0L }) Text(if (d.byStatus.isEmpty()) "غير متاح الآن." else "لا توجد طلبات بعد.", color = Mq.Muted)
                 }
             }
         }
@@ -282,16 +298,8 @@ fun AdminMoreScreen(profile: Profile, onNav: (String) -> Unit) {
     val activity = androidx.compose.ui.platform.LocalContext.current as Activity
     Screen("الإدارة") { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(
-                Triple("a_reports", "التقارير والإحصاءات", profile.can("reports")),
-                Triple("a_stores", "المتاجر والتجار والمنتجات", profile.can("stores")),
-                Triple("a_categories", "فئات المتاجر", profile.can("categories")),
-                Triple("a_users", "المستخدمون والصلاحيات", profile.can("users") || profile.can("permissions")),
-                Triple("a_settings", "رسوم التوصيل والمُهَل", profile.can("settings")),
-                Triple("a_expenses", "المصروفات", profile.can("expenses")),
-                Triple("a_export", "ملخص مالي وتصدير (CSV)", profile.can("finance")),
-                Triple("a_audit", "سجل التدقيق", profile.can("audit")),
-            ).filter { it.third }.forEach { (r, t, _) -> ActionButton(t, tonal = true) { onNav(r) } }
+            ActionButton("الملف الشخصي", tonal = true) { onNav("profile") }
+            adminMenuItems(profile).forEach { item -> ActionButton(item.label, tonal = true) { onNav(item.route) } }
             Text(profile.email, color = Mq.Muted, modifier = Modifier.padding(top = 12.dp))
             ActionButton("تسجيل الخروج", destructive = true) { signOutAll(activity) }
         }
@@ -486,70 +494,230 @@ private fun CategoryDialog(c: Category?, nextOrder: Long, onDismiss: () -> Unit)
 }
 
 // ---------- المستخدمون ----------
+/** صلاحيات الأدمن التي لا تُحدَّد افتراضيًا عند المنح (تصعيد حساس: يُؤشَّر عليها عمدًا) */
+private val SENSITIVE_ADMIN = setOf("permissions", "grant_admin")
+
+/** قائمة مربعات اختيار الصلاحيات. enabledKeys = ما يملكه المانح فقط (null = الكل متاح) */
+@Composable
+private fun PermissionChecklist(
+    items: List<Pair<String, String>>, selected: Set<String>, enabledKeys: Set<String>? = null, onChange: (Set<String>) -> Unit,
+) {
+    items.forEach { (key, label) ->
+        val on = enabledKeys == null || key in enabledKeys
+        Row(
+            Modifier.fillMaxWidth().clickable(enabled = on) { onChange(if (key in selected) selected - key else selected + key) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = key in selected, enabled = on, onCheckedChange = { onChange(if (it) selected + key else selected - key) })
+            Text(label, color = if (on) MaterialTheme.colorScheme.onSurface else Mq.Muted)
+        }
+    }
+    if (enabledKeys != null && items.any { it.first !in enabledKeys }) {
+        Text("الخيارات الباهتة لا تملكها أنت، فلا يمكنك منحها.", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 @Composable
 fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
-    val users = rememberLoadable { Repo.users() }
-    var email by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf("courier") }
-    var invited by remember { mutableStateOf(false) }
-    var permsFor by remember { mutableStateOf<UserRow?>(null) }
     val canManageUsers = profile.can("users")
     val canPerms = profile.can("permissions")
+    val canGrant = profile.can("grant_admin")
+    val users = rememberLoadable { Repo.users() }
+    val stores = rememberLoadable { Repo.allStores() }
+    // قراءة الدعوات تتطلب صلاحية «users»؛ بدونها لا نفتح المستمع حتى لا تظهر شاشة خطأ
+    val invites = rememberLoadable(canManageUsers) { if (canManageUsers) Repo.pendingInvites() else flowOf(emptyList()) }
+    var query by remember { mutableStateOf("") }
+    var permsFor by remember { mutableStateOf<UserRow?>(null) }
+    var grantFor by remember { mutableStateOf<UserRow?>(null) }
+    var revokeFor by remember { mutableStateOf<UserRow?>(null) }
 
-    permsFor?.let { PermissionsDialog(it) { permsFor = null } }
+    val storeList = (stores as? Loadable.Data)?.value.orEmpty()
+    val storeName = storeList.associate { it.id to it.name }
+
+    permsFor?.let { PermissionsDialog(it, profile) { permsFor = null } }
+    grantFor?.let { GrantAdminDialog(it, profile) { grantFor = null } }
+    revokeFor?.let { RevokeAdminDialog(it) { revokeFor = null } }
 
     Screen("المستخدمون", onBack = onBack) { pad ->
         LoadableView(users) { list ->
-            LazyColumn(Modifier.padding(pad)) {
-                if (canManageUsers) item {
-                    Section("دعوة موصّل أو مدير") {
-                        Field("البريد (Gmail)", email, { email = it; invited = false }, keyboard = KeyboardType.Email)
-                        ChipRow(listOf("courier" to "موصّل", "admin" to "مدير"), role) { role = it }
-                        ActionButton("إرسال الدعوة", enabled = email.contains("@")) {
-                            Api.adminInvite(email.trim().lowercase(), role, null)
-                            invited = true
-                        }
-                        if (invited) Text("تم تسجيل الدعوة. تُفعَّل عند أول دخول بهذا البريد.", color = Mq.Green)
-                    }
+            val q = query.trim().lowercase()
+            val shown = list.filter { q.isEmpty() || it.email.lowercase().contains(q) || it.name.lowercase().contains(q) }
+                .sortedWith(compareBy({ it.role }, { it.email }))
+            LazyColumn(Modifier.padding(pad), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
+                if (canManageUsers) item(key = "add") {
+                    AddUserSection(canCustomizePermissions = canPerms, stores = storeList)
                 }
-                items(list.sortedBy { it.role }, key = { it.uid }) { u ->
-                    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
-                        Column(Modifier.padding(14.dp)) {
-                            Text(u.name.ifBlank { u.email }, style = MaterialTheme.typography.titleMedium)
-                            Text(u.email, color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
-                            Text(roleLabel(u.role) + " • " + (if (u.status == "active") "نشط" else "موقوف") + (if (u.isTestAccount) " • تجريبي" else ""))
-                            if (u.role != "customer") {
-                                val all = Permissions.all(u.role)
+                val pending = (invites as? Loadable.Data)?.value.orEmpty()
+                if (canManageUsers && pending.isNotEmpty()) item(key = "pending") {
+                    Section("دعوات بانتظار أول دخول (${pending.size})") {
+                        pending.sortedBy { it.email }.forEach { inv ->
+                            Column(Modifier.padding(vertical = 4.dp)) {
+                                Text(inv.email)
                                 Text(
-                                    "الصلاحيات: " + (u.permissions?.let { p -> "مخصّصة (${p.count { it in all }} من ${all.size})" } ?: "كاملة (افتراضية)"),
+                                    roleLabel(inv.role) + (inv.storeId?.let { " • " + (storeName[it] ?: "متجر") } ?: "") +
+                                        (if (inv.permissions != null) " • صلاحيات مخصّصة" else ""),
                                     color = Mq.Muted, style = MaterialTheme.typography.bodySmall,
                                 )
                             }
-                            if (u.uid != profile.uid) {
-                                if (canManageUsers) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    ActionButton(if (u.status == "active") "إيقاف" else "تفعيل", Modifier.weight(1f), tonal = true) {
-                                        Api.adminSetUserStatus(u.uid, if (u.status == "active") "suspended" else "active", null)
-                                    }
-                                    ActionButton(if (u.isTestAccount) "إلغاء تجريبي" else "حساب تجريبي", Modifier.weight(1f), tonal = true) {
-                                        Api.adminSetUserStatus(u.uid, null, !u.isTestAccount)
-                                    }
-                                }
-                                if (canPerms && u.role != "customer") {
-                                    ActionButton("تخصيص الصلاحيات", Modifier.fillMaxWidth().padding(top = 8.dp), tonal = true) { permsFor = u }
-                                }
-                            }
                         }
                     }
+                }
+                item(key = "search") {
+                    Field("بحث بالاسم أو البريد", query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp))
+                }
+                if (shown.isEmpty()) item(key = "none") {
+                    Text("لا نتائج.", color = Mq.Muted, modifier = Modifier.padding(16.dp))
+                }
+                items(shown, key = { it.uid }) { u ->
+                    UserCard(
+                        u = u, me = profile, storeLabel = u.storeId?.let { storeName[it] },
+                        canManageUsers = canManageUsers, canPerms = canPerms, canGrant = canGrant,
+                        onPerms = { permsFor = u }, onGrant = { grantFor = u }, onRevoke = { revokeFor = u },
+                    )
                 }
             }
         }
     }
 }
 
+/** إنشاء مستخدم تاجر أو موصّل مع تحديد صلاحياته. الأدمن يُمنح لمستخدم موجود من بطاقته أدناه. */
 @Composable
-private fun PermissionsDialog(u: UserRow, onDismiss: () -> Unit) {
+private fun AddUserSection(canCustomizePermissions: Boolean, stores: List<Store>) {
+    var email by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf("merchant") }
+    var storeId by remember { mutableStateOf<String?>(null) }
+    var selected by remember(role) { mutableStateOf(Permissions.all(role).toSet()) }
+    var done by remember { mutableStateOf<String?>(null) }
+    val all = Permissions.all(role)
+    val needsStore = role == "merchant"
+
+    Section("إضافة مستخدم") {
+        Text("اكتب بريد Gmail. يصبح الحساب بالدور المحدد عند أول دخول بهذا البريد، أو فورًا إن كان مسجّلًا من قبل.", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+        Field("البريد (Gmail)", email, { email = it; done = null }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Email)
+        ChipRow(listOf("merchant" to "تاجر", "courier" to "موصّل"), role) { role = it; done = null }
+        if (needsStore) {
+            Text("متجر التاجر", style = MaterialTheme.typography.labelLarge)
+            if (stores.isEmpty()) Text("لا توجد متاجر بعد. أنشئ متجرًا أولًا من «المتاجر والتجار والمنتجات».", color = Mq.Muted)
+            else ChipRow(stores.sortedBy { it.name }.map { it.id to it.name }, storeId ?: "") { storeId = it; done = null }
+        }
+        if (canCustomizePermissions) {
+            Text("الصلاحيات", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+            PermissionChecklist(Permissions.catalog[role].orEmpty(), selected) { selected = it }
+        }
+        ActionButton(
+            "إنشاء المستخدم", Modifier.fillMaxWidth().padding(top = 8.dp),
+            enabled = email.contains("@") && (!needsStore || storeId != null) && (!canCustomizePermissions || selected.isNotEmpty()),
+        ) {
+            val custom = canCustomizePermissions && !selected.containsAll(all)
+            Api.adminInvite(
+                email.trim().lowercase(), role, if (needsStore) storeId else null,
+                permissions = if (custom) all.filter { it in selected } else null,
+                customizePermissions = canCustomizePermissions,
+            )
+            done = "تم حفظ المستخدم (" + roleLabel(role) + ") بصلاحياته: " + email.trim().lowercase()
+            email = ""
+        }
+        done?.let { Text(it, color = Mq.Green) }
+    }
+}
+
+@Composable
+private fun UserCard(
+    u: UserRow, me: Profile, storeLabel: String?,
+    canManageUsers: Boolean, canPerms: Boolean, canGrant: Boolean,
+    onPerms: () -> Unit, onGrant: () -> Unit, onRevoke: () -> Unit,
+) {
+    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
+        Column(Modifier.padding(14.dp)) {
+            Text(u.name.ifBlank { u.email }, style = MaterialTheme.typography.titleMedium)
+            Text(u.email, color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+            Text(
+                roleLabel(u.role) + (if (storeLabel != null) " • $storeLabel" else "") +
+                    " • " + (if (u.status == "active") "نشط" else "موقوف") + (if (u.isTestAccount) " • تجريبي" else ""),
+            )
+            if (u.role != "customer") {
+                val all = Permissions.all(u.role)
+                Text(
+                    "الصلاحيات: " + (u.permissions?.let { p -> "مخصّصة (${p.count { it in all }} من ${all.size})" } ?: "كاملة (افتراضية)"),
+                    color = Mq.Muted, style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (u.uid == me.uid) {
+                Text("حسابك", color = Mq.Green, style = MaterialTheme.typography.bodySmall)
+                return@Column
+            }
+            if (canManageUsers) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(if (u.status == "active") "إيقاف" else "تفعيل", Modifier.weight(1f), tonal = true) {
+                    Api.adminSetUserStatus(u.uid, if (u.status == "active") "suspended" else "active", null)
+                }
+                ActionButton(if (u.isTestAccount) "إلغاء تجريبي" else "حساب تجريبي", Modifier.weight(1f), tonal = true) {
+                    Api.adminSetUserStatus(u.uid, null, !u.isTestAccount)
+                }
+            }
+            if (canPerms && u.role != "customer") {
+                ActionButton("تخصيص الصلاحيات", Modifier.fillMaxWidth().padding(top = 8.dp), tonal = true) { onPerms() }
+            }
+            if (canGrant && u.role != "admin") {
+                ActionButton("منح صلاحية أدمن", Modifier.fillMaxWidth().padding(top = 8.dp), tonal = true) { onGrant() }
+            }
+            if (canGrant && u.role == "admin") {
+                ActionButton("سحب صلاحية الأدمن", Modifier.fillMaxWidth().padding(top = 8.dp), destructive = true) { onRevoke() }
+            }
+        }
+    }
+}
+
+/** منح صلاحية أدمن: يختار المانح الصلاحيات (ضمن ما يملكه هو فقط). التطبيق فعلي من الخادم والقواعد. */
+@Composable
+private fun GrantAdminDialog(u: UserRow, actor: Profile, onDismiss: () -> Unit) {
+    val items = Permissions.catalog["admin"].orEmpty()
+    val mine = items.map { it.first }.filter { actor.can(it) }.toSet()
+    var selected by remember { mutableStateOf(mine - SENSITIVE_ADMIN) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("منح صلاحية أدمن: " + u.name.ifBlank { u.email }) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "سيصبح هذا الحساب (" + roleLabel(u.role) + ") أدمن بالصلاحيات المؤشَّر عليها فقط، ويفقد دوره السابق" +
+                        (if (u.role == "merchant") " وارتباطه بالمتجر" else "") + ".",
+                    color = Mq.Muted, style = MaterialTheme.typography.bodySmall,
+                )
+                PermissionChecklist(items, selected, enabledKeys = mine) { selected = it }
+                ActionButton("منح صلاحية أدمن", Modifier.fillMaxWidth().padding(top = 8.dp), enabled = selected.isNotEmpty()) {
+                    Api.adminGrantAdmin(u.uid, items.map { it.first }.filter { it in selected })
+                    onDismiss()
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+    )
+}
+
+@Composable
+private fun RevokeAdminDialog(u: UserRow, onDismiss: () -> Unit) {
+    val st = rememberAction()
+    AlertDialog(
+        onDismissRequest = { if (!st.busy) onDismiss() },
+        title = { Text("سحب صلاحية الأدمن") },
+        text = { Text((u.name.ifBlank { u.email }) + " سيعود زبونًا عاديًا ويفقد كل صلاحياته الإدارية.") },
+        confirmButton = {
+            ActionButton("سحب الصلاحية", Modifier, state = st, destructive = true) {
+                Api.adminRevokeAdmin(u.uid)
+                onDismiss()
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !st.busy) { Text("رجوع") } },
+    )
+}
+
+@Composable
+private fun PermissionsDialog(u: UserRow, actor: Profile, onDismiss: () -> Unit) {
     val items = Permissions.catalog[u.role].orEmpty()
     val all = items.map { it.first }
+    // أدمن: لا يمنح المدير إلا ما يملكه. تاجر/موصّل: الكل متاح.
+    val enabled: Set<String>? = if (u.role == "admin") all.filter { actor.can(it) }.toSet() else null
     var selected by remember { mutableStateOf((u.permissions ?: all).filter { it in all }.toSet()) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -557,15 +725,7 @@ private fun PermissionsDialog(u: UserRow, onDismiss: () -> Unit) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("ما لا تؤشّر عليه لن يستطيع هذا الحساب فعله أو رؤيته، حتى لو حاول من خارج التطبيق.", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
-                items.forEach { (key, label) ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { selected = if (key in selected) selected - key else selected + key },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(checked = key in selected, onCheckedChange = { selected = if (it) selected + key else selected - key })
-                        Text(label)
-                    }
-                }
+                PermissionChecklist(items, selected, enabledKeys = enabled) { selected = it }
                 ActionButton("حفظ الصلاحيات", Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     // الاختيار الكامل = الافتراضي (يشمل أي صلاحية تُضاف مستقبلًا)
                     Api.adminSetPermissions(u.uid, if (selected.containsAll(all)) null else all.filter { it in selected })

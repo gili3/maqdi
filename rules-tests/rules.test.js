@@ -16,6 +16,7 @@ const USERS = {
   k1: { role: "courier", status: "active", name: "موصّل", fcmTokens: [] },
   limitedAdmin: { role: "admin", status: "active", name: "مدير مقيّد", permissions: ["orders", "stores"], fcmTokens: [] },
   m1x: { role: "merchant", status: "active", storeId: "s1", name: "تاجر مقيّد", permissions: ["products"], fcmTokens: [] },
+  granter: { role: "admin", status: "active", name: "مدير يمنح", permissions: ["grant_admin"], fcmTokens: [] },
   sus: { role: "customer", status: "suspended", name: "موقوف", fcmTokens: [] },
 };
 
@@ -191,4 +192,18 @@ test("التاجر المقيَّد بلا صلاحية الطلبات والح�
   await assertFails(getDoc(doc(db, "store_balances/s1")));
   await assertFails(getDoc(doc(db, "financial_entries/e1")));
   await assertSucceeds(getDoc(doc(db, "stores/s1")));
+});
+
+test("قراءة المستخدمين: تكفي صلاحية grant_admin، والمدير المقيَّد بدونها ممنوع", async () => {
+  const g = env.authenticatedContext("granter").firestore();
+  await assertSucceeds(getDoc(doc(g, "users/c1")));
+  const l = env.authenticatedContext("limitedAdmin").firestore();
+  await assertFails(getDoc(doc(l, "users/c1")));
+});
+
+test("لا أحد يمنح الأدمن بكتابة مباشرة (الدور من الخادم فقط)", async () => {
+  const g = env.authenticatedContext("granter").firestore();
+  await assertFails(updateDoc(doc(g, "users/c1"), { role: "admin" }));
+  const c = env.authenticatedContext("c1").firestore();
+  await assertFails(updateDoc(doc(c, "users/c1"), { role: "admin", permissions: ["users"] }));
 });

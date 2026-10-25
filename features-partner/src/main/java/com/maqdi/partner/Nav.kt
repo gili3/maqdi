@@ -4,9 +4,6 @@ import android.app.Activity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,38 +24,51 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.maqdi.core.ActionButton
 import com.maqdi.core.ConnectionBanner
+import com.maqdi.core.MqBottomBar
+import com.maqdi.core.MqNavItem
 import com.maqdi.core.Profile
+import com.maqdi.core.ProfileScreen
 import com.maqdi.core.Screen
 import com.maqdi.core.signOutAll
 
-data class Tab(val route: String, val label: String, val icon: ImageVector)
+/** التبويب هو عنصر التنقّل المشترك (الشريط السفلي والقائمة الجانبية) */
+typealias Tab = MqNavItem
 
-/** هيكل مشترك: شريط اتصال + تبويبات سفلية + ملاحة */
+/** المسار الحالي في الملاحة (null قبل أول وجهة) */
+@Composable
+fun NavHostController.currentRoute(): String? {
+    val entry by currentBackStackEntryAsState()
+    return entry?.destination?.route
+}
+
+/** دفع وجهة فوق الحالية؛ singleTop يمنع فتح الشاشة مرتين عند النقر المزدوج */
+fun NavHostController.push(route: String) {
+    navigate(route) { launchSingleTop = true }
+}
+
+/** تبويب: يحفظ الحالة ويعود لنقطة البداية. وجهة أخرى: تُدفع فوق الحالية */
+fun NavHostController.menuGo(route: String, tabs: List<Tab>, start: String) {
+    if (tabs.any { it.route == route }) {
+        navigate(route) {
+            popUpTo(start) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    } else {
+        navigate(route) { launchSingleTop = true }
+    }
+}
+
+/** هيكل مشترك: شريط اتصال + شريط سفلي + ملاحة */
 @Composable
 fun TabScaffold(nav: NavHostController, tabs: List<Tab>, start: String, builder: NavGraphBuilder.() -> Unit) {
-    val entry by nav.currentBackStackEntryAsState()
-    val route = entry?.destination?.route
+    val route = nav.currentRoute()
     val tabRoutes = tabs.map { it.route }
     Scaffold(
         topBar = { ConnectionBanner() },
         bottomBar = {
             if (route in tabRoutes) {
-                NavigationBar {
-                    tabs.forEach { t ->
-                        NavigationBarItem(
-                            selected = route == t.route,
-                            onClick = {
-                                nav.navigate(t.route) {
-                                    popUpTo(start) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(t.icon, contentDescription = null) },
-                            label = { Text(t.label) },
-                        )
-                    }
-                }
+                MqBottomBar(tabs, route, onSelect = { nav.menuGo(it, tabs, start) })
             }
         },
     ) { pad ->
@@ -80,14 +90,16 @@ fun NavGraphBuilder.orderRoute(nav: NavHostController, profile: Profile) {
     }
 }
 
+/** حسابي للتاجر/المندوب/المدير: الملف الشخصي المشترك */
 @Composable
-fun MeScreen(profile: Profile) {
+fun MeScreen(profile: Profile, onBack: (() -> Unit)? = null) = ProfileScreen(profile, onBack = onBack)
+
+@Composable
+fun NoStoreScreen() {
     val activity = LocalContext.current as Activity
-    Screen("حسابي") { pad ->
-        Column(Modifier.padding(pad).padding(16.dp)) {
-            Text(profile.name.ifBlank { profile.email })
-            Text(profile.email, color = com.maqdi.core.Mq.Muted)
-            Text(com.maqdi.core.roleLabel(profile.role), color = com.maqdi.core.Mq.Green)
+    Screen("حسابك غير مكتمل") { pad ->
+        Column(Modifier.padding(pad).padding(24.dp)) {
+            Text("حساب التاجر هذا غير مربوط بمتجر. تواصل مع الإدارة لربطه بمتجرك ثم أعد فتح التطبيق.")
             ActionButton("تسجيل الخروج", Modifier.fillMaxWidth().padding(top = 24.dp), tonal = true) { signOutAll(activity) }
         }
     }

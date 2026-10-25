@@ -45,6 +45,17 @@ private val errors = mapOf(
     "category_in_use" to "هذه الفئة مستعملة في متاجر. غيّر فئة تلك المتاجر أولًا.",
     "role_has_no_permissions" to "هذا الحساب (زبون) بلا صلاحيات تُخصَّص.",
     "cannot_remove_own_permissions" to "لا يمكنك سحب صلاحية «تخصيص الصلاحيات» من نفسك.",
+    "cannot_grant_beyond_own" to "لا يمكنك منح صلاحية لا تملكها أنت.",
+    "cannot_grant_self" to "لا يمكنك منح نفسك صلاحية أدمن.",
+    "cannot_revoke_self" to "لا يمكنك سحب صلاحية الأدمن من نفسك.",
+    "cannot_revoke_higher" to "هذا الأدمن يملك صلاحيات أكثر منك، فلا يمكنك سحبها منه.",
+    "already_admin" to "هذا المستخدم أدمن بالفعل. عدّل صلاحياته من «تخصيص الصلاحيات».",
+    "not_admin" to "هذا المستخدم ليس أدمن.",
+    "user_is_admin" to "هذا المستخدم أدمن. لا يُغيَّر دوره بالدعوة؛ اسحب صلاحية الأدمن منه أولًا.",
+    "invalid_permissions" to "قائمة الصلاحيات غير صحيحة.",
+    "invalid_storeId" to "اختر المتجر الذي يتبع له التاجر.",
+    "invalid_email" to "البريد الإلكتروني غير صحيح.",
+    "data_unavailable" to "البيانات غير جاهزة بعد (قد تكون الفهارس قيد الإنشاء). انتظر دقائق ثم أعد المحاولة.",
 )
 
 fun arabicError(msg: String?): String {
@@ -57,9 +68,12 @@ fun arabicError(msg: String?): String {
 object Api {
     private val fns: FirebaseFunctions by lazy { FirebaseFunctions.getInstance("europe-west3") }
 
-    suspend fun call(name: String, data: Map<String, Any?> = emptyMap()): Map<String, Any?> {
+    /** timeoutSec: للقراءات فقط (لوحة وتقارير). الكتابات تبقى بمهلة النظام حتى لا تُقطع وهي تُنفَّذ. */
+    suspend fun call(name: String, data: Map<String, Any?> = emptyMap(), timeoutSec: Long? = null): Map<String, Any?> {
         try {
-            val res = fns.getHttpsCallable(name).call(data).await()
+            val fn = fns.getHttpsCallable(name)
+            if (timeoutSec != null) fn.setTimeout(timeoutSec, java.util.concurrent.TimeUnit.SECONDS)
+            val res = fn.call(data).await()
             @Suppress("UNCHECKED_CAST")
             return (res.data as? Map<String, Any?>) ?: emptyMap()
         } catch (e: FirebaseFunctionsException) {
@@ -149,8 +163,27 @@ object Api {
         call("adminSetUserPermissions", mapOf("uid" to uid, "permissions" to permissions))
     }
 
-    suspend fun adminInvite(email: String, role: String, storeId: String?) {
-        call("adminInviteUser", mapOf("email" to email, "role" to role, "storeId" to storeId))
+    /**
+     * إنشاء/دعوة تاجر أو موصّل. الأدمن لا يُمنح من هنا (انظر adminGrantAdmin).
+     * customizePermissions=false: لا يُرسَل الحقل (السلوك القديم). true: permissions=null يعني كل صلاحيات الدور.
+     */
+    suspend fun adminInvite(
+        email: String, role: String, storeId: String?,
+        permissions: List<String>? = null, customizePermissions: Boolean = false,
+    ) {
+        val m = mutableMapOf<String, Any?>("email" to email, "role" to role, "storeId" to storeId)
+        if (customizePermissions) m["permissions"] = permissions
+        call("adminInviteUser", m)
+    }
+
+    /** منح صلاحية أدمن لمستخدم موجود بقائمة صلاحيات صريحة (لا تتجاوز صلاحيات المانح) */
+    suspend fun adminGrantAdmin(uid: String, permissions: List<String>) {
+        call("adminGrantAdmin", mapOf("uid" to uid, "permissions" to permissions))
+    }
+
+    /** سحب صلاحية الأدمن: يعود الحساب زبونًا */
+    suspend fun adminRevokeAdmin(uid: String) {
+        call("adminRevokeAdmin", mapOf("uid" to uid))
     }
 
     suspend fun adminSetUserStatus(uid: String, status: String?, isTest: Boolean?) {
@@ -195,16 +228,18 @@ object Api {
         return Summary(n("deliveryRevenue"), n("cashNet"), n("storePayableNet"), n("expenses"), n("netRevenue"))
     }
 
-    data class Dashboard(val byStatus: Map<String, Long>, val deliveryRevenueToday: Long, val cashToday: Long)
+    /** الأرقام null = تعذّر حسابها (مثل فهرس غير جاهز)؛ partial = بعض الأجزاء ناقصة */
+    data class Dashboard(val byStatus: Map<String, Long>, val deliveryRevenueToday: Long?, val cashToday: Long?, val partial: Boolean)
 
     suspend fun adminDashboard(): Dashboard {
-        val r = call("adminDashboard")
+        val r = call("adminDashboard", timeoutSec = 30)
         @Suppress("UNCHECKED_CAST")
         val m = (r["ordersByStatus"] as? Map<String, Any?>) ?: emptyMap()
         return Dashboard(
             byStatus = m.mapValues { (it.value as? Number)?.toLong() ?: 0L },
-            deliveryRevenueToday = (r["deliveryRevenueToday"] as? Number)?.toLong() ?: 0L,
-            cashToday = (r["cashToday"] as? Number)?.toLong() ?: 0L,
+            deliveryRevenueToday = (r["deliveryRevenueToday"] as? Number)?.toLong(),
+            cashToday = (r["cashToday"] as? Number)?.toLong(),
+            partial = r["partial"] as? Boolean ?: false,
         )
     }
 
@@ -227,7 +262,7 @@ object Api {
     /** kind: admin | merchant | courier ؛ from/to بصيغة ISO-8601 (الحد الأقصى 92 يومًا) */
     suspend fun report(kind: String, from: String, to: String, storeId: String? = null): ReportData {
         val fn = when (kind) { "admin" -> "adminReport"; "merchant" -> "merchantReport"; else -> "courierReport" }
-        val r = call(fn, mapOf("from" to from, "to" to to, "storeId" to storeId))
+        val r = call(fn, mapOf("from" to from, "to" to to, "storeId" to storeId), timeoutSec = 60)
         return ReportData(
             totals = r["totals"].asMap().mapValues { it.value.asLong() },
             byDay = r["byDay"].asRows().map { DayRow(it["day"] as? String ?: "", it["orders"].asLong(), it["itemsTotal"].asLong()) },

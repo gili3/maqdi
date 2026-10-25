@@ -80,15 +80,28 @@ class SessionViewModel : ViewModel() {
         _state.value = SessionState.Loading
         job = viewModelScope.launch {
             try {
-                Api.ensureProfile(name)
-                launch {
-                    try {
-                        val token = FirebaseMessaging.getInstance().token.await()
-                        Repo.addToken(uid, token)
-                    } catch (e: CancellationException) { throw e } catch (_: Exception) { }
-                }
+                // الملف الشخصي يُقرأ أولًا (ويعمل من الذاكرة المحلية). نستدعي ensureProfile فقط إن لم يوجد الملف،
+                // فلا ينتظر المستخدم دالة سحابية (وبدء باردٍ لها) في كل فتح للتطبيق.
+                var ensureTried = false
+                var tokenSent = false
                 Repo.profile(uid).collect { p ->
-                    _state.value = if (p == null) SessionState.Loading else SessionState.Ready(p)
+                    if (p != null) {
+                        _state.value = SessionState.Ready(p)
+                        if (!tokenSent) {
+                            tokenSent = true
+                            launch {
+                                try {
+                                    val token = FirebaseMessaging.getInstance().token.await()
+                                    Repo.addToken(uid, token)
+                                } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+                            }
+                        }
+                    } else if (!ensureTried) {
+                        ensureTried = true
+                        _state.value = SessionState.Loading
+                        Api.ensureProfile(name) // يُنشئ الملف؛ اللقطة التالية تحمله
+                    }
+                    // p == null بعد المحاولة: نبقى في التحميل بانتظار اللقطة التالية
                 }
             } catch (e: CancellationException) {
                 throw e

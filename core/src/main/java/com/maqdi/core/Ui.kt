@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -120,12 +122,17 @@ fun Screen(
     floating: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    val openDrawer = LocalOpenDrawer.current
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع") }
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع") }
+                    } else if (openDrawer != null) {
+                        IconButton(onClick = openDrawer) { Icon(Icons.Default.Menu, contentDescription = "القائمة") }
+                    }
                 },
                 actions = {
                     actions()
@@ -147,7 +154,7 @@ fun Screen(
 sealed interface Loadable<out T> {
     data object Loading : Loadable<Nothing>
     data class Data<T>(val value: T) : Loadable<T>
-    data class Err(val message: String) : Loadable<Nothing>
+    data class Err(val message: String, val retry: (() -> Unit)? = null) : Loadable<Nothing>
 }
 
 private fun errorText(e: Throwable): String = when {
@@ -158,6 +165,17 @@ private fun errorText(e: Throwable): String = when {
     else -> "تعذّر تحميل البيانات. تحقق من الإنترنت وأعد المحاولة."
 }
 
+/** رسالة مفهومة لفشل إجراء (حفظ/إرسال): الاتصال، الصلاحية، أو خطأ عام */
+fun actionErrorText(e: Throwable): String = when {
+    e is ApiException -> e.userMessage
+    e is FirebaseFirestoreException && (e.code == FirebaseFirestoreException.Code.UNAVAILABLE ||
+        e.code == FirebaseFirestoreException.Code.DEADLINE_EXCEEDED) ->
+        "الاتصال ضعيف أو مقطوع. تحقق من الإنترنت وحاول مجددًا."
+    e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+        "لا تملك صلاحية تنفيذ هذا الإجراء."
+    else -> "حدث خطأ غير متوقع. حاول مجددًا."
+}
+
 fun <T> Flow<T>.asLoadable(): Flow<Loadable<T>> =
     map<T, Loadable<T>> { Loadable.Data(it) }
         .onStart { emit(Loadable.Loading) }
@@ -165,16 +183,19 @@ fun <T> Flow<T>.asLoadable(): Flow<Loadable<T>> =
 
 @Composable
 fun <T> rememberLoadable(vararg keys: Any?, make: () -> Flow<T>): Loadable<T> {
-    val flow = remember(*keys) { make().asLoadable() }
+    // attempt يتغيّر عند «إعادة المحاولة» فيُعاد الاشتراك بالمصدر من جديد
+    var attempt by remember(*keys) { mutableStateOf(0) }
+    val flow = remember(*keys, attempt) { make().asLoadable() }
     val state by flow.collectAsState(initial = Loadable.Loading)
-    return state
+    val s = state
+    return if (s is Loadable.Err) s.copy(retry = { attempt++ }) else s
 }
 
 @Composable
 fun <T> LoadableView(l: Loadable<T>, content: @Composable (T) -> Unit) {
     when (l) {
         is Loadable.Loading -> LoadingBox()
-        is Loadable.Err -> ErrorBox(l.message)
+        is Loadable.Err -> ErrorBox(l.message, onRetry = l.retry)
         is Loadable.Data -> content(l.value)
     }
 }
@@ -189,6 +210,8 @@ fun ErrorBox(message: String, onRetry: (() -> Unit)? = null) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Icon(Icons.Default.CloudOff, contentDescription = null, tint = Mq.Muted, modifier = Modifier.size(48.dp))
+        Spacer(Modifier.size(12.dp))
         Text(message, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.error)
         if (onRetry != null) {
             Spacer(Modifier.size(16.dp))
@@ -229,10 +252,8 @@ fun ActionButton(
                     onClick()
                 } catch (e: CancellationException) {
                     throw e
-                } catch (e: ApiException) {
-                    state.error = e.userMessage
                 } catch (e: Exception) {
-                    state.error = "حدث خطأ غير متوقع. حاول مجددًا."
+                    state.error = actionErrorText(e)
                 } finally {
                     state.busy = false
                 }
@@ -262,10 +283,11 @@ fun ActionButton(
 fun Field(
     label: String, value: String, onChange: (String) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(), keyboard: KeyboardType = KeyboardType.Text,
-    singleLine: Boolean = true, enabled: Boolean = true,
+    singleLine: Boolean = true, enabled: Boolean = true, error: String? = null,
 ) {
     OutlinedTextField(
         shape = MaterialTheme.shapes.medium,
+        isError = error != null, supportingText = error?.let { msg -> { Text(msg) } },
         value = value, onValueChange = onChange, label = { Text(label) }, modifier = modifier,
         singleLine = singleLine, enabled = enabled, keyboardOptions = KeyboardOptions(keyboardType = keyboard),
     )

@@ -13,17 +13,34 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
+// وثيقة مشوّهة (حقل بنوع غير متوقع) تُتجاوز بدل أن يسقط التطبيق كله؛ التحويل يجري داخل مستمع Firestore
 private fun <T> Query.listFlow(map: (DocumentSnapshot) -> T): Flow<List<T>> = callbackFlow {
     val reg = addSnapshotListener { snap, err ->
-        if (err != null) close(err) else trySend(snap?.documents?.map(map) ?: emptyList())
+        if (err != null) {
+            close(err)
+        } else {
+            val rows = snap?.documents?.mapNotNull { d ->
+                try { map(d) } catch (e: Exception) { android.util.Log.w("Repo", "skip malformed doc ${d.reference.path}", e); null }
+            } ?: emptyList()
+            trySend(rows)
+        }
     }
     awaitClose { reg.remove() }
 }
 
 private fun <T> DocumentReference.docFlow(map: (DocumentSnapshot) -> T): Flow<T?> = callbackFlow {
     val reg = addSnapshotListener { snap, err ->
-        if (err != null) close(err) else trySend(if (snap != null && snap.exists()) map(snap) else null)
+        if (err != null) {
+            close(err)
+        } else {
+            try {
+                trySend(if (snap != null && snap.exists()) map(snap) else null)
+            } catch (e: Exception) {
+                close(e) // يظهر كخطأ قابل لإعادة المحاولة بدل انهيار التطبيق
+            }
+        }
     }
     awaitClose { reg.remove() }
 }
@@ -108,14 +125,21 @@ object Repo {
         db.collection("orders").whereEqualTo("courierUid", uid).orderBy("createdAt", desc).limit(100).listFlow { it.toOrder() }
 
     fun users() = db.collection("users").limit(200).listFlow { it.toUserRow() }
+    /** الدعوات غير المستعملة (تتطلب صلاحية «users»). التصفية على حقل واحد فلا يلزم فهرس. */
+    fun pendingInvites() = db.collection("invites").whereEqualTo("used", false).limit(100).listFlow { it.toInvite() }
     fun audit() = db.collection("audit_logs").orderBy("at", desc).limit(100).listFlow { it.toAudit() }
     fun expenses() = db.collection("expenses").orderBy("createdAt", desc).limit(50).listFlow { it.toExpense() }
 
     /** الزبون يعدّل بياناته الشخصية فقط (تسمح القواعد بهذه الحقول) */
     suspend fun updateProfile(uid: String, name: String, phone: String?, savedAddress: String?) {
-        db.document("users/$uid").update(
-            mapOf("name" to name, "phone" to phone, "savedAddress" to savedAddress, "updatedAt" to Timestamp.now())
-        ).await()
+        // بلا اتصال تبقى الكتابة في طابور Firestore ولا يعود await؛ نضع مهلة ونشرح الحالة بصدق
+        val done = withTimeoutOrNull(15_000) {
+            db.document("users/$uid").update(
+                mapOf("name" to name, "phone" to phone, "savedAddress" to savedAddress, "updatedAt" to Timestamp.now())
+            ).await()
+            true
+        }
+        if (done == null) throw ApiException("تعذّر تأكيد الحفظ لضعف الاتصال. ستُحفظ تغييراتك تلقائيًا عند عودة الاتصال.")
     }
 
     suspend fun addToken(uid: String, token: String) {

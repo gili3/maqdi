@@ -1,5 +1,6 @@
 package com.maqdi.core
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,9 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,17 +38,34 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 val LocalProfile = staticCompositionLocalOf<Profile?> { null }
 val LocalOpenNotifications = staticCompositionLocalOf<(() -> Unit)?> { null }
+/** يفتح القائمة الجانبية؛ null إن لم يوفّر التطبيق قائمة (فلا يظهر زر القائمة) */
+val LocalOpenDrawer = staticCompositionLocalOf<(() -> Unit)?> { null }
 
-/** غلاف مشترك لكل التطبيقات: يوفّر الملف الشخصي ومركز الإشعارات فوق الشاشات */
+/**
+ * غلاف مشترك لكل التطبيقات: يوفّر الملف الشخصي ومركز الإشعارات فوق الشاشات،
+ * وقائمة جانبية اختيارية: تظهر إن مُرّر [menu] غير فارغ.
+ */
 @Composable
-fun AppShell(profile: Profile, onOpenOrder: (String) -> Unit, content: @Composable () -> Unit) {
+fun AppShell(
+    profile: Profile,
+    onOpenOrder: (String) -> Unit,
+    menu: List<MqDrawerSection> = emptyList(),
+    currentRoute: String? = null,
+    onMenuNavigate: (String) -> Unit = {},
+    content: @Composable () -> Unit,
+) {
     var show by remember { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val activity = LocalContext.current as Activity
+    val openDrawer: () -> Unit = remember { { scope.launch { drawerState.open() } } }
     BackHandler(enabled = show) { show = false }
     // أسماء الفئات المخصّصة من الإدارة (تتحدّث حيًّا)
     LaunchedEffect(Unit) {
@@ -56,16 +77,47 @@ fun AppShell(profile: Profile, onOpenOrder: (String) -> Unit, content: @Composab
             // تبقى الفئات الافتراضية إن تعذّرت القراءة
         }
     }
-    CompositionLocalProvider(LocalProfile provides profile, LocalOpenNotifications provides { show = true }) {
-        Box(Modifier.fillMaxSize()) {
-            content()
-            if (show) {
-                NotificationsScreen(
-                    uid = profile.uid,
-                    onBack = { show = false },
-                    onOpenOrder = { show = false; onOpenOrder(it) },
-                )
+    CompositionLocalProvider(
+        LocalProfile provides profile,
+        LocalOpenNotifications provides { show = true },
+        LocalOpenDrawer provides (if (menu.isNotEmpty()) openDrawer else null),
+    ) {
+        val body: @Composable () -> Unit = {
+            Box(Modifier.fillMaxSize()) {
+                content()
+                if (show) {
+                    NotificationsScreen(
+                        uid = profile.uid,
+                        onBack = { show = false },
+                        onOpenOrder = { show = false; onOpenOrder(it) },
+                    )
+                }
             }
+        }
+        if (menu.isEmpty()) {
+            body()
+        } else {
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                // السحب مغلق وهو مغلق كي لا يتعارض مع تمرير القوائم والرسوم؛ يُفتح بزر القائمة ويُغلق بالسحب أو اللمس
+                gesturesEnabled = drawerState.isOpen,
+                drawerContent = {
+                    MqDrawerContent(
+                        profile = profile,
+                        sections = menu,
+                        selected = currentRoute,
+                        onSelect = { route ->
+                            scope.launch { drawerState.close() }
+                            onMenuNavigate(route)
+                        },
+                        onSignOut = {
+                            scope.launch { drawerState.close() }
+                            scope.launch { signOutAll(activity) }
+                        },
+                    )
+                },
+                content = body,
+            )
         }
     }
 }

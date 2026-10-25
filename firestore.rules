@@ -25,7 +25,7 @@ service cloud.firestore {
     // ---------- المستخدمون ----------
     // الإنشاء والدور والحالة من الخادم فقط. المستخدم يعدّل بياناته الشخصية فقط.
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || can('users') || can('permissions'));
+      allow read: if signedIn() && (request.auth.uid == uid || can('users') || can('permissions') || can('grant_admin'));
       allow update: if isActive() && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['name', 'phone', 'savedAddress', 'fcmTokens', 'updatedAt'])
@@ -75,7 +75,7 @@ service cloud.firestore {
         || can('orders') || can('deliveries')
         // الجاهزة للاستلام يراها كل موصّل؛ أما «في الطريق» فيراها الموصّل المستلِم فقط (السطر التالي)
         || (isCourier() && roleCan('deliveries') && resource.data.status == 'ready_for_pickup')
-        || (isCourier() && roleCan('deliveries') && resource.data.get('courierUid', '') == request.auth.uid)
+        || (isCourier() && roleCan('deliveries') && resource.data.courierUid == request.auth.uid)
       );
       allow write: if false;
 

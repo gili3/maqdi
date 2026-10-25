@@ -1,7 +1,7 @@
 import { DocumentReference, DocumentSnapshot, FieldValue, Query, Timestamp, Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import {
-  callable, db, docId, int, loadActor, obj, optStr, readSettings, str, submissionKey, writeAudit,
+  callable, db, docId, int, loadActor, obj, optStr, readSettings, safely, str, submissionKey, writeAudit,
 } from "./util";
 import { LOCAL_OFFSET_MS, STATUSES } from "./config";
 import { AggregateField } from "firebase-admin/firestore";
@@ -278,24 +278,32 @@ export const adminDashboard = callable(async (req) => {
   const startLocal = Math.floor((now + LOCAL_OFFSET_MS) / 86_400_000) * 86_400_000 - LOCAL_OFFSET_MS;
   const startTs = Timestamp.fromMillis(startLocal);
 
+  // كل جزء مستقل: فشل رقم واحد (مثل فهرس غير جاهز) لا يُسقط اللوحة كلها؛ تُعاد علامة partial
   const counts: Record<string, number> = {};
+  let failedParts = 0;
   await Promise.all(
     STATUSES.map(async (s) => {
-      const r = await db.collection("orders").where("status", "==", s).count().get();
-      counts[s] = r.data().count;
+      const r = await safely(`dashboard_count:${s}`, async () => (await db.collection("orders").where("status", "==", s).count().get()).data().count, -1);
+      if (r.ok) counts[s] = r.value; else failedParts++;
     })
   );
 
-  const sumFor = async (ledger: Ledger) => {
-    const r = await db
-      .collection("financial_entries")
-      .where("ledger", "==", ledger)
-      .where("createdAt", ">=", startTs)
-      .aggregate({ total: AggregateField.sum("amount") })
-      .get();
-    return r.data().total ?? 0;
-  };
-  const [deliveryRevenueToday, cashToday] = await Promise.all([sumFor("delivery_revenue"), sumFor("cash")]);
-  const settings = await readSettings();
-  return { ordersByStatus: counts, deliveryRevenueToday, cashToday, settings };
+  const sumFor = (ledger: Ledger) =>
+    safely<number | null>(`dashboard_sum:${ledger}`, async () => {
+      const r = await db
+        .collection("financial_entries")
+        .where("ledger", "==", ledger)
+        .where("createdAt", ">=", startTs)
+        .aggregate({ total: AggregateField.sum("amount") })
+        .get();
+      return r.data().total ?? 0;
+    }, null);
+  const [rev, cash] = await Promise.all([sumFor("delivery_revenue"), sumFor("cash")]);
+  if (!rev.ok) failedParts++;
+  if (!cash.ok) failedParts++;
+  // لا شيء نعرضه: نُبلغ العميل بخطأ صريح بدل لوحة فارغة مضلِّلة
+  if (Object.keys(counts).length === 0 && !rev.ok && !cash.ok) throw new HttpsError("failed-precondition", "data_unavailable");
+
+  const settings = (await safely("dashboard_settings", () => readSettings(), null)).value;
+  return { ordersByStatus: counts, deliveryRevenueToday: rev.value, cashToday: cash.value, settings, partial: failedParts > 0 };
 });

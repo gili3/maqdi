@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -280,14 +283,39 @@ fun StatusChip(status: String) {
     }
 }
 
+/** خط زمني عمودي لمراحل الطلب: مكتمل بعلامة، والحالية بأيقونتها ولونها الدلالي، والقادمة باهتة */
 @Composable
 fun StatusSteps(status: String) {
-    val i = St.steps.indexOf(status)
-    if (i >= 0) {
-        LinearProgressIndicator(
-            progress = { (i + 1f) / St.steps.size },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        )
+    val cur = St.steps.indexOf(status)
+    if (cur < 0) return
+    val delivered = status == St.DELIVERED
+    val accent = St.color(status)
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        St.steps.forEachIndexed { i, step ->
+            val done = i < cur || delivered
+            val now = i == cur && !delivered
+            Row(verticalAlignment = Alignment.Top) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier.size(26.dp).background(if (done) Mq.Green else if (now) accent else Mq.Chip, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (done) Icon(Icons.Default.Check, contentDescription = null, tint = Mq.Card, modifier = Modifier.size(16.dp))
+                        else if (now) Icon(St.icon(step), contentDescription = null, tint = Mq.Card, modifier = Modifier.size(15.dp))
+                    }
+                    if (i < St.steps.lastIndex) {
+                        Box(Modifier.width(2.dp).height(20.dp).background(if (i < cur || delivered) Mq.Green else Mq.Line))
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    St.label(step),
+                    color = if (done || now) Mq.Ink else Mq.Muted,
+                    fontWeight = if (now) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
     }
 }
 

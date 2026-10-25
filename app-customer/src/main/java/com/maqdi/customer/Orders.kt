@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -76,7 +77,7 @@ fun OrdersScreen(uid: String, onOpen: (String) -> Unit) {
 fun OrderDetailScreen(orderId: String, onBack: () -> Unit) {
     val order = rememberLoadable(orderId) { Repo.order(orderId) }
     Screen("تفاصيل الطلب", onBack = onBack) { pad ->
-        Column(Modifier.padding(pad)) {
+        Column(Modifier.padding(pad).fillMaxSize()) {
             LoadableView(order) { o ->
                 if (o == null) Empty("الطلب غير موجود.") else OrderBody(o)
             }
@@ -90,7 +91,8 @@ private fun OrderBody(o: Order) {
     var showCancel by remember { mutableStateOf(false) }
     var showApprove by remember { mutableStateOf(false) }
 
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Section(o.storeName) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("الحالة")
@@ -145,18 +147,25 @@ private fun OrderBody(o: Order) {
             o.courierName?.let { InfoRow("الموصّل", it) }
         }
 
-        if (o.status == St.AWAITING) {
-            ActionButton("أوافق على الإجمالي (${money(o.total)})", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-                showApprove = true
-            }
-            ActionButton("لا أوافق (إلغاء الطلب)", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true) {
-                showDecline = true
-            }
-        } else if (o.status == St.PENDING || o.status == St.CONFIRMED) {
+        if (o.status == St.PENDING || o.status == St.CONFIRMED) {
             ActionButton("إلغاء الطلب", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true) {
                 showCancel = true
             }
         }
+    }
+    // لحظة القرار الأهم: الإجمالي وزر الموافقة ثابتان أسفل الشاشة
+    if (o.status == St.AWAITING) {
+        androidx.compose.material3.Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("المبلغ المستحق نقدًا", color = Mq.Muted)
+                    Text(money(o.total), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                }
+                ActionButton("أوافق على الإجمالي") { showApprove = true }
+                ActionButton("لا أوافق (إلغاء الطلب)", tonal = true) { showDecline = true }
+            }
+        }
+    }
     }
 
     if (showApprove) {

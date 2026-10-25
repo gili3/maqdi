@@ -1,6 +1,14 @@
 package com.maqdi.partner
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.platform.LocalContext
+import android.net.Uri
+import android.content.Intent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -96,7 +104,7 @@ fun CourierScreen(profile: Profile, onOpen: (String) -> Unit) {
 fun PartnerOrderScreen(orderId: String, profile: Profile, onBack: () -> Unit) {
     val order = rememberLoadable(orderId) { Repo.order(orderId) }
     Screen("تفاصيل الطلب", onBack = onBack) { pad ->
-        Column(Modifier.padding(pad)) {
+        Column(Modifier.padding(pad).fillMaxSize()) {
             LoadableView(order) { o -> if (o == null) Empty("الطلب غير موجود.") else PartnerOrderBody(o, profile) }
         }
     }
@@ -121,7 +129,8 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
         return
     }
 
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Section(o.customerName.ifBlank { "الزبون" }) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(o.storeName)
@@ -129,9 +138,21 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
             }
             StatusSteps(o.status)
             InfoRow("الهاتف", o.customerPhone)
-            InfoRow("العنوان", o.address)
+            if (courierish) {
+                Text("العنوان", color = Mq.Muted, modifier = Modifier.padding(top = 4.dp))
+                Text(o.address, style = MaterialTheme.typography.titleMedium)
+            } else {
+                InfoRow("العنوان", o.address)
+            }
             o.locationNote?.let { InfoRow("وصف الموقع", it) }
             InfoRow("وقت الطلب", dateTime(o.createdAt))
+            if (courierish && o.customerPhone.isNotBlank() && (o.status == St.READY || o.status == St.OUT)) {
+                val ctx = LocalContext.current
+                Spacer(Modifier.height(8.dp))
+                ActionButton("اتصال بالزبون", tonal = true) {
+                    ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + o.customerPhone)))
+                }
+            }
             o.courierName?.let { InfoRow("الموصّل", it) }
             o.rejectReason?.let { Text("سبب الرفض: $it", color = Mq.Red) }
             o.cancelReason?.let { Text("سبب الإلغاء: $it", color = Mq.Red) }
@@ -174,17 +195,21 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
                 else -> {}
             }
         }
-        if (courierish) {
-            when (o.status) {
-                St.READY -> ActionButton("استلمت الطلب من المتجر", pad) { Api.changeStatus(o.id, St.OUT) }
-                St.OUT -> {
-                    ActionButton("تم التسليم وتحصيل ${money(o.total)}", pad) { dialog = "deliver" }
-                    ActionButton("تعذّر التسليم", pad, tonal = true) { dialog = "fail" }
+        if (canCancel) ActionButton("إلغاء الطلب", pad, destructive = true) { dialog = "cancel" }
+    }
+    // إجراء المندوب الرئيسي ثابت أسفل الشاشة (استلام أو تسليم)، وصلاحيته تُفرض في الخادم
+    if (courierish && (o.status == St.READY || o.status == St.OUT)) {
+        Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (o.status == St.READY) {
+                    ActionButton("استلمت الطلب من المتجر") { Api.changeStatus(o.id, St.OUT) }
+                } else {
+                    ActionButton("تم التسليم وتحصيل ${money(o.total)}") { dialog = "deliver" }
+                    ActionButton("تعذّر التسليم", tonal = true) { dialog = "fail" }
                 }
-                else -> {}
             }
         }
-        if (canCancel) ActionButton("إلغاء الطلب", pad, destructive = true) { dialog = "cancel" }
+    }
     }
 
     when (dialog) {

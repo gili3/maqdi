@@ -38,4 +38,4 @@ jobs:
       - name: Deploy rules, indexes, storage and functions
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
-        run: firebase deploy --only firestore:rules,firestore:indexes,storage,functions --project maqdi-19689
+        run: firebase deploy --only firestore:rules,firestore:indexes,storage,functions --project maqdi-19689 --force

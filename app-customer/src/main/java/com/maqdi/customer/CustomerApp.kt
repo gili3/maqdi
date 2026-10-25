@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -33,6 +34,7 @@ fun CustomerApp(profile: Profile) {
     val route = entry?.destination?.route
     val tabs = listOf(
         Tab("stores", "المتاجر", Icons.Default.Home),
+        Tab("search", "بحث", Icons.Default.Search),
         Tab("cart", if (Cart.count > 0) "السلة (${Cart.count})" else "السلة", Icons.Default.ShoppingCart),
         Tab("orders", "طلباتي", Icons.Default.Menu),
         Tab("account", "حسابي", Icons.Default.Person),
@@ -69,6 +71,7 @@ fun CustomerApp(profile: Profile) {
                 val id = it.arguments?.getString("id") ?: ""
                 ProductsScreen(id, onBack = { nav.popBackStack() }, onOpenCart = { nav.navigate("cart") })
             }
+            composable("search") { SearchScreen(onOpenStore = { nav.navigate("store/$it") }) }
             composable("cart") {
                 CartScreen(
                     profile,

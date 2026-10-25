@@ -9,6 +9,7 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
@@ -43,6 +44,11 @@ object Repo {
     fun allStores() = db.collection("stores").listFlow { it.toStore() }
     fun store(id: String) = db.document("stores/$id").docFlow { it.toStore() }
     fun products(storeId: String) = db.collection("products").whereEqualTo("storeId", storeId).listFlow { it.toProduct() }
+
+    /** قراءة واحدة (بلا مستمع حيّ) للمنتجات المتاحة، لتغذية البحث العام بأقل تكلفة قراءات */
+    fun availableProductsOnce(): Flow<List<Product>> = flow {
+        emit(db.collection("products").whereEqualTo("isAvailable", true).limit(400).get().await().documents.map { it.toProduct() })
+    }
 
     fun order(id: String) = db.document("orders/$id").docFlow { it.toOrder() }
     fun customerOrders(uid: String) =

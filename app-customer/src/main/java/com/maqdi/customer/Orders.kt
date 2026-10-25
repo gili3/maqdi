@@ -48,13 +48,10 @@ fun OrdersScreen(uid: String, onOpen: (String) -> Unit) {
     Screen("طلباتي") { pad ->
         Column(Modifier.padding(pad)) {
             LoadableView(orders) { list ->
-                if (list.isEmpty()) Empty("لم تطلب شيئًا بعد.")
+                if (list.isEmpty()) com.maqdi.core.EmptyState("لم تطلب شيئًا بعد", "تصفّح المتاجر وأرسل أول طلب.")
                 else LazyColumn {
                     items(list, key = { it.id }) { o ->
-                        Card(
-                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable { onOpen(o.id) },
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                        ) {
+                        com.maqdi.core.MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), onClick = { onOpen(o.id) }) {
                             Column(Modifier.padding(14.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                     Text(o.storeName, style = MaterialTheme.typography.titleMedium)

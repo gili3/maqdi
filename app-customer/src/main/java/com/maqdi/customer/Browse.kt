@@ -34,6 +34,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.maqdi.core.Empty
+import com.maqdi.core.EmptyState
+import com.maqdi.core.Mq
+import com.maqdi.core.MqCard
+import com.maqdi.core.SearchField
 import com.maqdi.core.Field
 import com.maqdi.core.Loadable
 import com.maqdi.core.LoadableView
@@ -73,21 +77,25 @@ fun StoresScreen(onOpen: (String) -> Unit) {
 }
 
 @Composable
+fun OpenBadge(open: Boolean) {
+    val c = if (open) Mq.Green else Mq.Red
+    androidx.compose.material3.Surface(color = c.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
+        Text(
+            if (open) "مفتوح" else "مغلق", color = c, style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
 private fun StoreRow(s: Store, onClick: () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-    ) {
+    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), onClick = onClick) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(s.name, style = MaterialTheme.typography.titleMedium)
-                Text(categoryLabel(s.category), color = Color.Gray)
+                Text(categoryLabel(s.category), color = Mq.Muted)
             }
-            Text(
-                if (s.isOpen) "مفتوح" else "مغلق",
-                color = if (s.isOpen) Color(0xFF166534) else Color(0xFFB91C1C),
-                style = MaterialTheme.typography.labelLarge,
-            )
+            OpenBadge(s.isOpen)
         }
     }
 }
@@ -126,7 +134,7 @@ fun ProductsScreen(storeId: String, onBack: () -> Unit, onOpenCart: () -> Unit) 
                     color = Color(0xFFB91C1C), modifier = Modifier.padding(12.dp),
                 )
             }
-            Field("ابحث عن منتج", q, { q = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+            SearchField(q, { q = it }, "ابحث في المتجر", Modifier.fillMaxWidth().padding(horizontal = 12.dp))
             LoadableView(products) { list ->
                 val cats = list.mapNotNull { it.category?.trim()?.takeIf { c -> c.isNotEmpty() } }.distinct().sorted()
                 if (cats.isNotEmpty()) {
@@ -138,9 +146,9 @@ fun ProductsScreen(storeId: String, onBack: () -> Unit, onOpenCart: () -> Unit) 
                         cats.forEach { c -> FilterChip(selected = cat == c, onClick = { cat = c }, label = { Text(c) }) }
                     }
                 }
-                val shown = list.filter { (cat == "all" || it.category?.trim() == cat) && (q.isBlank() || it.name.contains(q.trim(), ignoreCase = true)) }
+                val shown = list.filter { (cat == "all" || it.category?.trim() == cat) && com.maqdi.core.matchesQuery(q, it.name, it.category) }
                     .sortedWith(compareByDescending<Product> { it.isAvailable }.thenBy { it.name })
-                if (shown.isEmpty()) Empty("لا توجد منتجات.")
+                if (shown.isEmpty()) EmptyState("لا توجد منتجات", "جرّب بحثًا آخر أو تصنيفًا مختلفًا.")
                 else LazyColumn {
                     items(shown, key = { it.id }) { p ->
                         ProductRow(p, qty = Cart.lines[p.id]?.qty ?: 0, canOrder = !closed) { change(p, it) }
@@ -166,12 +174,9 @@ fun ProductsScreen(storeId: String, onBack: () -> Unit, onOpenCart: () -> Unit) 
 @Composable
 private fun ProductRow(p: Product, qty: Int, canOrder: Boolean, onQty: (Int) -> Unit) {
     val maxQty = minOf(99L, p.stockQty ?: 99L).toInt()
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-    ) {
+    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            StorageImage(p.imagePath, Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)))
+            StorageImage(p.imagePath, Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(p.name, style = MaterialTheme.typography.titleMedium)

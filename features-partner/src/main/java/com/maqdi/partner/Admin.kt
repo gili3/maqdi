@@ -269,6 +269,7 @@ fun AdminMoreScreen(profile: Profile, onNav: (String) -> Unit) {
     Screen("الإدارة") { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(
+                "a_reports" to "التقارير والإحصاءات",
                 "a_stores" to "المتاجر والتجار والمنتجات",
                 "a_users" to "المستخدمون والموصّلون",
                 "a_settings" to "رسوم التوصيل والمُهَل",

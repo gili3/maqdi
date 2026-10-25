@@ -75,10 +75,15 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun MaqdiTheme(content: @Composable () -> Unit) {
     val colors = lightColorScheme(
-        primary = Color(0xFF166534), onPrimary = Color.White,
-        primaryContainer = Color(0xFFDCFCE7), onPrimaryContainer = Color(0xFF052E16),
-        secondary = Color(0xFFB45309), background = Color(0xFFFAFAF9), surface = Color.White,
-        error = Color(0xFFB91C1C),
+        primary = Mq.Green, onPrimary = Color.White,
+        primaryContainer = Mq.GreenSoft, onPrimaryContainer = Color(0xFF052E16),
+        secondary = Mq.Amber, secondaryContainer = Color(0xFFFEF3C7), onSecondaryContainer = Color(0xFF451A03),
+        background = Mq.Bg, onBackground = Mq.Ink, surface = Color.White, onSurface = Mq.Ink,
+        surfaceVariant = Mq.Chip, onSurfaceVariant = Mq.Muted, outline = Mq.Line, outlineVariant = Mq.Line,
+        error = Mq.Red,
+    )
+    val shapes = androidx.compose.material3.Shapes(
+        small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(16.dp), large = RoundedCornerShape(22.dp),
     )
     val typo = Typography(
         bodyLarge = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
@@ -89,7 +94,7 @@ fun MaqdiTheme(content: @Composable () -> Unit) {
         labelLarge = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium),
     )
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        MaterialTheme(colorScheme = colors, typography = typo) {
+        MaterialTheme(colorScheme = colors, typography = typo, shapes = shapes) {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
         }
     }
@@ -161,9 +166,7 @@ fun <T> LoadableView(l: Loadable<T>, content: @Composable (T) -> Unit) {
 }
 
 @Composable
-fun LoadingBox() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-}
+fun LoadingBox() = ListSkeleton()
 
 @Composable
 fun ErrorBox(message: String, onRetry: (() -> Unit)? = null) {
@@ -181,11 +184,7 @@ fun ErrorBox(message: String, onRetry: (() -> Unit)? = null) {
 }
 
 @Composable
-fun Empty(text: String) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Text(text, textAlign = TextAlign.Center, color = Color.Gray)
-    }
-}
+fun Empty(text: String) = EmptyState(text)
 
 // ---------- الأزرار (تمنع النقر المزدوج) ----------
 class ActionState {
@@ -289,10 +288,7 @@ fun InfoRow(label: String, value: String, bold: Boolean = false) {
 
 @Composable
 fun Section(title: String, content: @Composable () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-    ) {
+    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
         Column(Modifier.padding(14.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.size(6.dp))

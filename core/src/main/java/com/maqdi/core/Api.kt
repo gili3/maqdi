@@ -186,4 +186,35 @@ object Api {
             cashToday = (r["cashToday"] as? Number)?.toLong() ?: 0L,
         )
     }
+
+    // ---------- التقارير (من الخادم؛ الصلاحية تُفرض هناك) ----------
+    data class DayRow(val day: String, val orders: Long, val amount: Long)
+    data class RankRow(val name: String, val count: Long, val amount: Long)
+    data class ReportData(
+        val totals: Map<String, Long>, val byDay: List<DayRow>, val topProducts: List<RankRow>,
+        val byStore: List<RankRow>, val other: Map<String, Long>, val truncated: Boolean, val failed: Long,
+    )
+
+    private fun Any?.asLong() = (this as? Number)?.toLong() ?: 0L
+
+    @Suppress("UNCHECKED_CAST")
+    private fun Any?.asRows() = (this as? List<Map<String, Any?>>) ?: emptyList()
+
+    @Suppress("UNCHECKED_CAST")
+    private fun Any?.asMap() = (this as? Map<String, Any?>) ?: emptyMap()
+
+    /** kind: admin | merchant | courier ؛ from/to بصيغة ISO-8601 (الحد الأقصى 92 يومًا) */
+    suspend fun report(kind: String, from: String, to: String, storeId: String? = null): ReportData {
+        val fn = when (kind) { "admin" -> "adminReport"; "merchant" -> "merchantReport"; else -> "courierReport" }
+        val r = call(fn, mapOf("from" to from, "to" to to, "storeId" to storeId))
+        return ReportData(
+            totals = r["totals"].asMap().mapValues { it.value.asLong() },
+            byDay = r["byDay"].asRows().map { DayRow(it["day"] as? String ?: "", it["orders"].asLong(), it["itemsTotal"].asLong()) },
+            topProducts = r["topProducts"].asRows().map { RankRow(it["name"] as? String ?: "", it["qty"].asLong(), it["revenue"].asLong()) },
+            byStore = r["byStore"].asRows().map { RankRow(it["storeName"] as? String ?: "", it["orders"].asLong(), it["itemsTotal"].asLong()) },
+            other = r["otherStatuses"].asMap().mapValues { it.value.asLong() },
+            truncated = r["truncated"] as? Boolean ?: false,
+            failed = r["failed"].asLong(),
+        )
+    }
 }

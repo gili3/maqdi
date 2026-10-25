@@ -21,6 +21,7 @@ dependencies {
     api("androidx.compose.ui:ui")
     api("androidx.compose.material3:material3")
     api("androidx.compose.material:material-icons-core")
+    api("androidx.compose.material:material-icons-extended")
     api("androidx.activity:activity-compose:1.9.2")
     api("androidx.navigation:navigation-compose:2.8.0")
     api("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.5")

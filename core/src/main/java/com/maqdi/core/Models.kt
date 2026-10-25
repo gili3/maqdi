@@ -41,6 +41,11 @@ data class Order(
 data class Settings(
     val deliveryFee: Long = 4000, val merchantReviewMinutes: Long = 15,
     val customerApprovalMinutes: Long = 30, val ordersEnabled: Boolean = true,
+    val maxOpenOrders: Long = 3,
+)
+
+data class AppNotification(
+    val id: String, val title: String, val body: String, val orderId: String?, val createdAt: Long?, val read: Boolean,
 )
 
 data class StoreBalance(val storeId: String, val payable: Long, val settled: Long) {
@@ -129,6 +134,12 @@ fun DocumentSnapshot.toOrder(): Order {
 fun DocumentSnapshot.toSettings() = Settings(
     deliveryFee = getLong("deliveryFee") ?: 4000, merchantReviewMinutes = getLong("merchantReviewMinutes") ?: 15,
     customerApprovalMinutes = getLong("customerApprovalMinutes") ?: 30, ordersEnabled = getBoolean("ordersEnabled") ?: true,
+    maxOpenOrders = getLong("maxOpenOrders") ?: 3,
+)
+
+fun DocumentSnapshot.toNotification() = AppNotification(
+    id = id, title = getString("title") ?: "", body = getString("body") ?: "", orderId = getString("orderId"),
+    createdAt = time("createdAt"), read = getBoolean("read") ?: false,
 )
 
 fun DocumentSnapshot.toBalance() = StoreBalance(storeId = id, payable = lng("payable"), settled = lng("settled"))

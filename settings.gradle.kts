@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "maqdi"
-include(":core", ":app-customer", ":app-partner")
+include(":core", ":features-partner", ":app-customer", ":app-merchant", ":app-courier", ":app-admin")

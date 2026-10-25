@@ -1,6 +1,6 @@
 import { Timestamp, Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
-import { Status } from "./config";
+import { OPEN_STATUSES, Status } from "./config";
 import { addEntry, bumpBalance } from "./finance";
 import { canTransition } from "./stateMachine";
 import {
@@ -53,11 +53,16 @@ export const createOrder = callable(async (req) => {
     const prodRefs = pids.map((p) => db.doc(`products/${p}`));
     const [idem, storeSnap, ...prodSnaps] = await tx.getAll(idemRef, db.doc(`stores/${storeId}`), ...prodRefs);
     const settings = await readSettings(tx);
+    const openOrders = await tx.get(
+      db.collection("orders").where("customerId", "==", actor.uid).where("status", "in", OPEN_STATUSES).limit(50)
+    );
 
     // إعادة إرسال نفس الطلب بعد انقطاع الاتصال ترجع الطلب الأول
     if (idem.exists) return { orderId: idem.get("orderId") as string, duplicate: true };
 
     if (!settings.ordersEnabled) throw new HttpsError("failed-precondition", "orders_disabled");
+    // سقف الطلبات المفتوحة لكل زبون (حماية من الإساءة)
+    if (openOrders.size >= ((settings.maxOpenOrders as number) ?? 3)) throw new HttpsError("failed-precondition", "too_many_open_orders");
     if (!storeSnap.exists || storeSnap.get("status") !== "active") throw new HttpsError("failed-precondition", "store_unavailable");
     if (storeSnap.get("isOpen") !== true) throw new HttpsError("failed-precondition", "store_closed");
 
@@ -238,7 +243,11 @@ export const changeOrderStatus = callable(async (req) => {
     assertAccess(actor, o);
 
     // الضغط المزدوج أو إعادة المحاولة: لا أثر ثانٍ
-    if (o.status === to) return { ok: true, status: to, alreadyApplied: true };
+    if (o.status === to) {
+      // مندوب ثانٍ يضغط «استلمت» بعد أن استلمه غيره: خطأ صريح لا نجاح كاذب
+      if (to === "out_for_delivery" && o.courierUid !== actor.uid) throw new HttpsError("failed-precondition", "already_taken");
+      return { ok: true, status: to, alreadyApplied: true };
+    }
     if (!canTransition(actor.role, o.status, to))
       throw new HttpsError("failed-precondition", `transition_not_allowed:${o.status}->${to}`);
     if (actor.role === "courier" && o.status === "out_for_delivery" && o.courierUid !== actor.uid)

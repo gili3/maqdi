@@ -26,6 +26,15 @@ service cloud.firestore {
             || (request.resource.data.phone is string && request.resource.data.phone.size() <= 20))
         && request.resource.data.fcmTokens is list && request.resource.data.fcmTokens.size() <= 10;
       allow create, delete: if false;
+
+      // مركز الإشعارات: ينشئه الخادم فقط، والمستخدم يقرأ إشعاراته ويعلّمها مقروءة
+      match /notifications/{nid} {
+        allow read: if isActive() && request.auth.uid == uid;
+        allow update: if isActive() && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read is bool;
+        allow create, delete: if false;
+      }
     }
 
     // ---------- المتاجر والمنتجات: قراءة فقط ----------

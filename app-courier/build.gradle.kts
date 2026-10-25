@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.maqdi.partner"
+    namespace = "com.maqdi.courier"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.maqdi.partner"
+        applicationId = "com.maqdi.courier"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -39,5 +39,5 @@ android {
 }
 
 dependencies {
-    implementation(project(":core"))
+    implementation(project(":features-partner"))
 }

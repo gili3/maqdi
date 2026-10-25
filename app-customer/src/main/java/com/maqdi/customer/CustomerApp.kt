@@ -39,6 +39,7 @@ fun CustomerApp(profile: Profile) {
     )
     val tabRoutes = tabs.map { it.route }
 
+    com.maqdi.core.AppShell(profile, onOpenOrder = { nav.navigate("order/$it") }) {
     Scaffold(
         topBar = { com.maqdi.core.ConnectionBanner() },
         bottomBar = {
@@ -83,5 +84,6 @@ fun CustomerApp(profile: Profile) {
             }
             composable("account") { AccountScreen(profile) }
         }
+    }
     }
 }

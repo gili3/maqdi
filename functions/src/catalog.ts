@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { normalizeSearch } from "./textUtil";
 import { bool, callable, db, docId, int, loadActor, obj, oneOf, optStr, phone, str, writeAudit } from "./util";
 
 // ---------- المتاجر (المدير) ----------
@@ -14,17 +15,26 @@ export const adminUpsertStore = callable(async (req) => {
     status: oneOf(d.status, "status", ["active", "suspended"] as const),
     isOpen: bool(d.isOpen, "isOpen"),
   };
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const actor = await loadActor(req, ["admin"], tx);
     const ref = storeId ? db.doc(`stores/${storeId}`) : db.collection("stores").doc();
     const snap = await tx.get(ref);
     if (storeId && !snap.exists) throw new HttpsError("not-found", "store_not_found");
     const now = Timestamp.now();
+    const renamed = snap.exists && snap.get("name") !== data.name;
     if (snap.exists) tx.update(ref, { ...data, updatedAt: now });
     else tx.set(ref, { ...data, createdAt: now, updatedAt: now });
     writeAudit(tx, actor, snap.exists ? "update_store" : "create_store", "store", ref.id, data);
-    return { storeId: ref.id };
+    return { storeId: ref.id, renamed };
   });
+  // تحديث اسم المتجر المنسوخ في منتجاته (حتى 450 منتجًا)
+  if (result.renamed) {
+    const prods = await db.collection("products").where("storeId", "==", result.storeId).limit(450).get();
+    const batch = db.batch();
+    prods.docs.forEach((p) => batch.update(p.ref, { storeName: data.name }));
+    if (!prods.empty) await batch.commit();
+  }
+  return { storeId: result.storeId };
 });
 
 // ---------- المنتجات (التاجر لمتجره، أو المدير) ----------
@@ -55,8 +65,10 @@ export const upsertProduct = callable(async (req) => {
     const snap = await tx.get(ref);
     if (productId && (!snap.exists || snap.get("storeId") !== storeId)) throw new HttpsError("not-found", "product_not_found");
     const now = Timestamp.now();
-    if (snap.exists) tx.update(ref, { ...data, updatedAt: now });
-    else tx.set(ref, { ...data, storeId, createdAt: now, updatedAt: now });
+    // حقول البحث: الاسم المطبَّع واسم المتجر (يُنسخ ليظهر في نتائج البحث العام)
+    const searchFields = { nameLower: normalizeSearch(data.name), storeName: storeSnap.get("name") as string };
+    if (snap.exists) tx.update(ref, { ...data, ...searchFields, updatedAt: now });
+    else tx.set(ref, { ...data, ...searchFields, storeId, createdAt: now, updatedAt: now });
     writeAudit(tx, actor, snap.exists ? "update_product" : "create_product", "product", ref.id, {
       storeId, oldPrice: snap.exists ? snap.get("price") : null, newPrice: data.price,
     });

@@ -112,7 +112,10 @@ fun Screen(
                 navigationIcon = {
                     if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع") }
                 },
-                actions = actions,
+                actions = {
+                    actions()
+                    if (onBack == null) BellAction()
+                },
             )
         },
         bottomBar = bottomBar,

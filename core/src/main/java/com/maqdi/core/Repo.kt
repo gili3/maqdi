@@ -9,6 +9,7 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
 private fun <T> Query.listFlow(map: (DocumentSnapshot) -> T): Flow<List<T>> = callbackFlow {
@@ -66,6 +67,28 @@ object Repo {
             .orderBy("createdAt", desc).limit(100).listFlow { it.toEntry() }
     fun allEntries(storeId: String) =
         db.collection("financial_entries").whereEqualTo("storeId", storeId).orderBy("createdAt", desc).limit(100).listFlow { it.toEntry() }
+
+    fun notifications(uid: String) =
+        db.collection("users/$uid/notifications").orderBy("createdAt", desc).limit(50).listFlow { it.toNotification() }
+
+    /** عدد غير المقروء (حتى 10) لعرضه على الجرس */
+    fun unreadCount(uid: String): Flow<Int> =
+        db.collection("users/$uid/notifications").whereEqualTo("read", false).limit(10).listFlow { 1 }.map { it.size }
+
+    suspend fun markRead(uid: String, id: String) {
+        db.document("users/$uid/notifications/$id").update("read", true).await()
+    }
+
+    suspend fun markAllRead(uid: String, ids: List<String>) {
+        if (ids.isEmpty()) return
+        val batch = db.batch()
+        ids.forEach { batch.update(db.document("users/$uid/notifications/$it"), "read", true) }
+        batch.commit().await()
+    }
+
+    /** توصيلات المندوب (التي استلمها) */
+    fun courierDeliveries(uid: String) =
+        db.collection("orders").whereEqualTo("courierUid", uid).orderBy("createdAt", desc).limit(100).listFlow { it.toOrder() }
 
     fun users() = db.collection("users").limit(200).listFlow { it.toUserRow() }
     fun audit() = db.collection("audit_logs").orderBy("at", desc).limit(100).listFlow { it.toAudit() }

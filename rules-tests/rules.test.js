@@ -39,6 +39,7 @@ test.beforeEach(async () => {
     await setDoc(doc(db, "financial_entries/e2"), { storeId: "s2", ledger: "store_payable", amount: 100 });
     await setDoc(doc(db, "financial_entries/e3"), { storeId: "s1", ledger: "cash", amount: 100 });
     await setDoc(doc(db, "audit_logs/a1"), { action: "x" });
+    await setDoc(doc(db, "users/c1/notifications/n1"), { title: "t", body: "b", read: false });
     await setDoc(doc(db, "store_balances/s1"), { payable: 100, settled: 0 });
     await setDoc(doc(db, "store_balances/s2"), { payable: 100, settled: 0 });
   });
@@ -122,4 +123,22 @@ test("غير المسجّل لا يقرأ شيئًا", async () => {
 test("الزبون يقرأ المتاجر والمنتجات", async () => {
   await assertSucceeds(getDoc(doc(as("c1"), "stores/s1")));
   await assertSucceeds(getDoc(doc(as("c1"), "products/p1")));
+});
+
+test("الإشعارات: يقرأ إشعاراته ويعلّمها مقروءة فقط", async () => {
+  await assertSucceeds(getDoc(doc(as("c1"), "users/c1/notifications/n1")));
+  await assertFails(getDoc(doc(as("c2"), "users/c1/notifications/n1")));
+  await assertSucceeds(updateDoc(doc(as("c1"), "users/c1/notifications/n1"), { read: true }));
+  await assertFails(updateDoc(doc(as("c1"), "users/c1/notifications/n1"), { title: "معدّل" }));
+  await assertFails(setDoc(doc(as("c1"), "users/c1/notifications/n2"), { title: "x", body: "y", read: false }));
+  await assertFails(deleteDoc(doc(as("c1"), "users/c1/notifications/n1")));
+});
+
+test("الموصّل يقرأ سجل توصيلاته فقط", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "orders/o3"), { customerId: "c2", storeId: "s2", status: "delivered", courierUid: "k1" });
+    await setDoc(doc(ctx.firestore(), "orders/o4"), { customerId: "c2", storeId: "s2", status: "delivered", courierUid: "other" });
+  });
+  await assertSucceeds(getDoc(doc(as("k1"), "orders/o3")));
+  await assertFails(getDoc(doc(as("k1"), "orders/o4")));
 });

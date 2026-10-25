@@ -39,6 +39,8 @@ private val errors = mapOf(
     "cannot_suspend_self" to "لا يمكنك إيقاف حسابك.",
     "user_not_found" to "المستخدم غير موجود.",
     "invalid_range" to "نطاق التاريخ غير صحيح.",
+    "too_many_open_orders" to "لديك طلبات مفتوحة كثيرة. انتظر اكتمال أحدها ثم أرسل غيره.",
+    "already_taken" to "استلم مندوب آخر هذا الطلب.",
 )
 
 fun arabicError(msg: String?): String {
@@ -141,6 +143,7 @@ object Api {
         call("adminUpdateSettings", mapOf(
             "deliveryFee" to s.deliveryFee, "merchantReviewMinutes" to s.merchantReviewMinutes,
             "customerApprovalMinutes" to s.customerApprovalMinutes, "ordersEnabled" to s.ordersEnabled,
+            "maxOpenOrders" to s.maxOpenOrders,
         ))
     }
 

@@ -80,13 +80,14 @@ export const adminSetUserStatus = callable(async (req) => {
 
 export const adminUpdateSettings = callable(async (req) => {
   const d = obj(req.data);
-  const patch = {
+  const patch: Record<string, unknown> = {
     deliveryFee: int(d.deliveryFee, "deliveryFee", 0, 1_000_000),
     merchantReviewMinutes: int(d.merchantReviewMinutes, "merchantReviewMinutes", 1, 1440),
     customerApprovalMinutes: int(d.customerApprovalMinutes, "customerApprovalMinutes", 1, 1440),
     ordersEnabled: bool(d.ordersEnabled, "ordersEnabled"),
     updatedAt: Timestamp.now(),
   };
+  if (d.maxOpenOrders !== undefined) patch.maxOpenOrders = int(d.maxOpenOrders, "maxOpenOrders", 1, 20);
   return db.runTransaction(async (tx) => {
     const actor = await loadActor(req, ["admin"], tx);
     const ref = db.doc("settings/app");

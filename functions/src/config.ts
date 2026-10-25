@@ -26,11 +26,14 @@ export const TERMINAL: Status[] = [
   "delivery_failed",
 ];
 
+export const OPEN_STATUSES: Status[] = STATUSES.filter((s) => !TERMINAL.includes(s));
+
 export const DEFAULT_SETTINGS = {
   deliveryFee: 4000,
   merchantReviewMinutes: 15,
   customerApprovalMinutes: 30,
   ordersEnabled: true,
+  maxOpenOrders: 3, // أقصى عدد طلبات مفتوحة لكل زبون
 };
 
 // السودان UTC+2 (بدون توقيت صيفي)

@@ -9,3 +9,5 @@ build/
 *.apk
 release.jks
 service-account*.json
+
+app-*/google-services.json

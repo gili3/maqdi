@@ -434,11 +434,13 @@ private fun SettingsForm(s: Settings) {
     var merchantMin by remember(s) { mutableStateOf(s.merchantReviewMinutes.toString()) }
     var customerMin by remember(s) { mutableStateOf(s.customerApprovalMinutes.toString()) }
     var enabled by remember(s) { mutableStateOf(s.ordersEnabled) }
+    var maxOpen by remember(s) { mutableStateOf(s.maxOpenOrders.toString()) }
     var saved by remember { mutableStateOf(false) }
     val feeV = fee.toLongOrNull()
     val mV = merchantMin.toLongOrNull()
     val cV = customerMin.toLongOrNull()
-    val valid = feeV != null && feeV in 0..1_000_000 && mV != null && mV in 1..1440 && cV != null && cV in 1..1440
+    val oV = maxOpen.toLongOrNull()
+    val valid = feeV != null && feeV in 0..1_000_000 && mV != null && mV in 1..1440 && cV != null && cV in 1..1440 && oV != null && oV in 1..20
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Section("رسوم التوصيل") {
@@ -450,13 +452,17 @@ private fun SettingsForm(s: Settings) {
             Field("مهلة موافقة الزبون", customerMin, { customerMin = it.filter { c -> c.isDigit() }; saved = false },
                 Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Number)
         }
+        Section("سقف الطلبات المفتوحة لكل زبون") {
+            Field("أقصى عدد (1 إلى 20)", maxOpen, { maxOpen = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
+            Text("يمنع زبونًا واحدًا من إغراق المتاجر بطلبات مفتوحة. يُحتسب كل طلب لم يُسلَّم أو يُلغَ بعد.", color = Color.Gray)
+        }
         Section("استقبال الطلبات") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("استقبال الطلبات مفعّل"); Switch(checked = enabled, onCheckedChange = { enabled = it; saved = false })
             }
         }
         ActionButton("حفظ", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), enabled = valid) {
-            Api.adminUpdateSettings(Settings(feeV ?: 0, mV ?: 15, cV ?: 30, enabled))
+            Api.adminUpdateSettings(Settings(feeV ?: 0, mV ?: 15, cV ?: 30, enabled, oV ?: 3))
             saved = true
         }
         if (saved) Text("تم الحفظ.", modifier = Modifier.padding(16.dp), color = Color(0xFF166534))

@@ -79,3 +79,12 @@
 # نتائج أول تشغيل على GitHub (2026-10-25) وإصلاحها
 - **Rules Tests:** نجح 12 من 13؛ سقط اختبار «الموصّل يقرأ سجل توصيلاته فقط» بخطأ `Firestore has already been started` لأنه استدعى `ctx.firestore()` مرتين. أُصلح بمثيل واحد لكل كتلة (وفي الاختبار الجديد أيضًا). **لم يُعاد التشغيل بعد.**
 - **Android Build:** فشل ربط الموارد: `android:style/Theme.Material.DayNight.NoActionBar not found`. أصلحته بسمة فاتحة افتراضية وسمة داكنة في `values-night`، كلتاهما من مكتبة النظام. **لم يُعاد التشغيل بعد.** كان ترجمة `:core:compileDebugKotlin` جارية حين توقّف البناء، فقد تظهر أخطاء Kotlin بعد هذا الإصلاح.
+
+---
+# إصلاح فشل بناء Android (2026-10-25)
+- **سبب الفشل:** `features-partner/.../Merchant.kt:188` استدعى `signOutAll` (دالة suspend) من `onClick` عادي. صار يمرّ عبر `scope.launch`.
+- **ملفات قديمة مكررة:** حُذف المجلد `app-partner/src/main/java/com/maqdi/partner/` (نسخ قديمة من Admin/Merchant/PartnerApp/... موجودة أصلًا في `features-partner`، وكانت ستسبب تعارض كلاسات و`R` غير معروف). نقطة الدخول الوحيدة: `com.maqdi.partnerapp.MainActivity`.
+- **تسجيل الخروج:** مسح بيانات الاعتماد صار داخل `NonCancellable` حتى لا يُقطع حين تغادر الشاشة التركيب بعد `signOut`.
+- **تنظيف الشاشات:** أيقونة `ReceiptLong` القديمة صارت `AutoMirrored`؛ حُذف مسار `me` اليتيم في واجهة التاجر (لا تبويب يوصل له، والخروج في «حسابي»)؛ حُذف عنصر فارغ بلا فائدة في صف المنتج؛ سلة الزبون الفارغة صار فيها زر «تصفّح المتاجر» (كان المعامل `onBrowse` غير مستخدم)؛ توحيد اسم شاشة التصدير مع القائمة.
+- **الصلاحيات:** لم يتغير شيء في Manifest (INTERNET وACCESS_NETWORK_STATE وPOST_NOTIFICATIONS كلها مستخدمة فعلًا؛ لا كاميرا ولا تخزين). قواعد Firestore وStorage تطابق استعلامات التطبيقين.
+- **لم يُتحقق منه:** الترجمة الفعلية (بيئة العمل بلا Gradle). شغّل Android Build وأرسل أي سطر `e:` يظهر.

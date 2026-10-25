@@ -3,6 +3,7 @@ package com.maqdi.customer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -47,8 +48,12 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
 
     Screen("السلة") { pad ->
         if (Cart.lines.isEmpty()) {
-            Column(Modifier.padding(pad)) {
+            androidx.compose.foundation.layout.Box(Modifier.padding(pad).fillMaxSize()) {
                 Empty("سلتك فارغة. اختر متجرًا وأضف منتجاتك.")
+                ActionButton(
+                    "تصفّح المتاجر",
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
+                ) { onBrowse() }
             }
         } else {
             val itemsTotal = Cart.itemsTotal

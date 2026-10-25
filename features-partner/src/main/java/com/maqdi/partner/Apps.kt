@@ -5,15 +5,12 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
@@ -27,7 +24,7 @@ import com.maqdi.core.Profile
 fun MerchantApp(profile: Profile) {
     val nav = rememberNavController()
     val tabs = listOf(
-        Tab("m_orders", "الطلبات", Icons.Default.ReceiptLong),
+        Tab("m_orders", "الطلبات", Icons.AutoMirrored.Filled.ReceiptLong),
         Tab("m_products", "المنتجات", Icons.Default.Inventory2),
         Tab("m_reports", "التقارير", Icons.Default.Assessment),
         Tab("m_account", "حسابي", Icons.Default.Storefront),
@@ -38,7 +35,6 @@ fun MerchantApp(profile: Profile) {
             composable("m_products") { MerchantProductsScreen(profile) }
             composable("m_reports") { ReportScreen("merchant", "تقارير المتجر") }
             composable("m_account") { StoreAccountScreen(profile.storeId ?: "", profile.name) }
-            composable("me") { MeScreen(profile) }
             orderRoute(nav, profile)
         }
     }
@@ -71,7 +67,7 @@ fun AdminApp(profile: Profile) {
     val nav = rememberNavController()
     val tabs = listOf(
         Tab("a_dashboard", "الرئيسية", Icons.Default.Home),
-        Tab("a_orders", "الطلبات", Icons.Default.ReceiptLong),
+        Tab("a_orders", "الطلبات", Icons.AutoMirrored.Filled.ReceiptLong),
         Tab("c_deliveries", "التوصيل", Icons.Default.LocalShipping),
         Tab("a_finance", "المالية", Icons.Default.AccountBalanceWallet),
         Tab("a_more", "الإدارة", Icons.Default.Settings),

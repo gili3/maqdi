@@ -193,8 +193,6 @@ private fun ProductRow(p: Product, qty: Int, canOrder: Boolean, onQty: (Int) -> 
             }
             if (p.isAvailable && maxQty > 0 && canOrder) {
                 Stepper(qty, onQty, min = 0, max = maxQty)
-            } else {
-                Box(Modifier.size(1.dp))
             }
         }
     }

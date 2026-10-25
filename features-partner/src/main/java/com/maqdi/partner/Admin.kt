@@ -538,7 +538,7 @@ fun ExportScreen(onBack: () -> Unit) {
     val b = isoEndExclusive(to)
     var summary by remember { mutableStateOf<Api.Summary?>(null) }
 
-    Screen("تصدير التقارير", onBack = onBack) { pad ->
+    Screen("ملخص مالي وتصدير", onBack = onBack) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             Section("الفترة") {
                 ChipRow(listOf("1" to "اليوم", "7" to "٧ أيام", "30" to "٣٠ يومًا"), range) { range = it; summary = null }

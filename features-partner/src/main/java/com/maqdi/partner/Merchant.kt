@@ -184,8 +184,9 @@ fun StoreAccountScreen(storeId: String, name: String) {
     val bal = rememberLoadable(storeId) { Repo.balance(storeId) }
     val entries = rememberLoadable(storeId) { Repo.storeLedger(storeId) }
     val activity = LocalContext.current as android.app.Activity
+    val scope = rememberCoroutineScope()
     Screen("حساب المتجر", actions = {
-        androidx.compose.material3.IconButton(onClick = { com.maqdi.core.signOutAll(activity) }) {
+        androidx.compose.material3.IconButton(onClick = { scope.launch { com.maqdi.core.signOutAll(activity) } }) {
             androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Logout, contentDescription = "تسجيل الخروج")
         }
     }) { pad ->

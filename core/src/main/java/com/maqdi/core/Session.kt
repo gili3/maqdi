@@ -39,6 +39,8 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -133,7 +135,10 @@ suspend fun googleSignIn(activity: Activity, webClientId: String) {
 
 suspend fun signOutAll(activity: Activity) {
     FirebaseAuth.getInstance().signOut()
-    try { CredentialManager.create(activity).clearCredentialState(ClearCredentialStateRequest()) } catch (_: Exception) { }
+    // بعد الخروج تغادر الشاشة التركيب فيُلغى النطاق؛ نكمل مسح بيانات الاعتماد رغم ذلك
+    withContext(NonCancellable) {
+        try { CredentialManager.create(activity).clearCredentialState(ClearCredentialStateRequest()) } catch (_: Exception) { }
+    }
 }
 
 @Composable

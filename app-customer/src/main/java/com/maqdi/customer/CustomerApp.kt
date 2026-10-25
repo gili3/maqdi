@@ -1,12 +1,10 @@
 package com.maqdi.customer
 
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -39,7 +37,7 @@ fun CustomerApp(profile: Profile) {
     val tabs = listOf(
         Tab("stores", "المتاجر", Icons.Default.Home),
         Tab("cart", if (Cart.count > 0) "السلة (${Cart.count})" else "السلة", Icons.Default.ShoppingCart),
-        Tab("orders", "طلباتي", Icons.Default.ReceiptLong),
+        Tab("orders", "طلباتي", Icons.AutoMirrored.Filled.ReceiptLong),
         Tab("account", "حسابي", Icons.Default.Person),
     )
     val tabRoutes = tabs.map { it.route }

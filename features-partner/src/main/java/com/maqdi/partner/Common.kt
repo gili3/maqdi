@@ -1,5 +1,6 @@
 package com.maqdi.partner
 
+import com.maqdi.core.MqCard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -38,10 +39,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun PartnerOrderRow(o: Order, showStore: Boolean, onOpen: (String) -> Unit) {
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable { onOpen(o.id) },
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-    ) {
+    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable { onOpen(o.id) }) {
         Column(Modifier.padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(

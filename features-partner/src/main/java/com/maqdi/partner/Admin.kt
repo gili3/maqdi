@@ -42,6 +42,7 @@ import com.maqdi.core.ActionButton
 import com.maqdi.core.Api
 import com.maqdi.core.ApiException
 import com.maqdi.core.Empty
+import com.maqdi.core.MqCard
 import com.maqdi.core.Entry
 import com.maqdi.core.Field
 import com.maqdi.core.InfoRow
@@ -161,10 +162,7 @@ fun FinanceScreen(onStore: (String) -> Unit) {
                 if (list.isEmpty()) Empty("لا توجد مستحقات بعد. تظهر بعد أول طلب مسلَّم.")
                 else LazyColumn {
                     items(list.sortedByDescending { it.outstanding }, key = { it.storeId }) { b ->
-                        Card(
-                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clickable { onStore(b.storeId) },
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                        ) {
+                        MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clickable { onStore(b.storeId) }) {
                             Row(Modifier.padding(14.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(names[b.storeId] ?: b.storeId, style = MaterialTheme.typography.titleMedium)
                                 Text(money(b.outstanding), color = MaterialTheme.colorScheme.primary)
@@ -302,10 +300,7 @@ fun AdminStoresScreen(onBack: () -> Unit, onProducts: (String) -> Unit) {
                 if (list.isEmpty()) Empty("لا توجد متاجر. اضغط + لإضافة أول متجر.")
                 else LazyColumn {
                     items(list.sortedBy { it.name }, key = { it.id }) { s ->
-                        Card(
-                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clickable { editing = s },
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                        ) {
+                        MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clickable { editing = s }) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(s.name, style = MaterialTheme.typography.titleMedium)
                                 Text(
@@ -392,10 +387,7 @@ fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
                     }
                 }
                 items(list.sortedBy { it.role }, key = { it.uid }) { u ->
-                    Card(
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                    ) {
+                    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
                         Column(Modifier.padding(14.dp)) {
                             Text(u.name.ifBlank { u.email }, style = MaterialTheme.typography.titleMedium)
                             Text(u.email, color = Color.Gray, style = MaterialTheme.typography.bodySmall)

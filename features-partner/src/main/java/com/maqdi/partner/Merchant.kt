@@ -42,6 +42,7 @@ import com.maqdi.core.ActionButton
 import com.maqdi.core.Api
 import com.maqdi.core.ApiException
 import com.maqdi.core.Empty
+import com.maqdi.core.MqCard
 import com.maqdi.core.Field
 import com.maqdi.core.ImageUtil
 import com.maqdi.core.InfoRow
@@ -86,10 +87,7 @@ fun ProductsManager(storeId: String, onBack: (() -> Unit)?) {
                 if (list.isEmpty()) Empty("لا توجد منتجات بعد. اضغط + لإضافة أول منتج.")
                 else LazyColumn {
                     items(list.sortedBy { it.name }, key = { it.id }) { p ->
-                        Card(
-                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clickable { editing = p },
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                        ) {
+                        MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clickable { editing = p }) {
                             Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 StorageImage(p.imagePath, Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
                                 Spacer(Modifier.width(12.dp))

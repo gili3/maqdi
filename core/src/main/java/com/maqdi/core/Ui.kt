@@ -237,17 +237,18 @@ fun ActionButton(
         }
     }
     val btnModifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+    val btnShape = RoundedCornerShape(14.dp)
     Column(modifier) {
         val label: @Composable () -> Unit = {
-            if (state.busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) else Text(text)
+            if (state.busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = androidx.compose.material3.LocalContentColor.current) else Text(text, fontWeight = FontWeight.Bold)
         }
         when {
-            tonal -> FilledTonalButton(onClick = onTap, enabled = enabled && !state.busy, modifier = btnModifier) { label() }
+            tonal -> FilledTonalButton(onClick = onTap, enabled = enabled && !state.busy, modifier = btnModifier, shape = btnShape) { label() }
             destructive -> Button(
-                onClick = onTap, enabled = enabled && !state.busy, modifier = btnModifier,
+                onClick = onTap, enabled = enabled && !state.busy, modifier = btnModifier, shape = btnShape,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             ) { label() }
-            else -> Button(onClick = onTap, enabled = enabled && !state.busy, modifier = btnModifier) { label() }
+            else -> Button(onClick = onTap, enabled = enabled && !state.busy, modifier = btnModifier, shape = btnShape) { label() }
         }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp)) }
     }
@@ -261,6 +262,7 @@ fun Field(
     singleLine: Boolean = true, enabled: Boolean = true,
 ) {
     OutlinedTextField(
+        shape = MaterialTheme.shapes.medium,
         value = value, onValueChange = onChange, label = { Text(label) }, modifier = modifier,
         singleLine = singleLine, enabled = enabled, keyboardOptions = KeyboardOptions(keyboardType = keyboard),
     )

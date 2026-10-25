@@ -17,6 +17,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -65,7 +68,13 @@ fun CustomerApp(profile: Profile) {
             }
         },
     ) { pad ->
-        NavHost(nav, startDestination = "stores", modifier = Modifier.padding(pad)) {
+        NavHost(
+            nav, startDestination = "stores", modifier = Modifier.padding(pad),
+        enterTransition = { fadeIn(tween(220)) },
+        exitTransition = { fadeOut(tween(120)) },
+        popEnterTransition = { fadeIn(tween(220)) },
+        popExitTransition = { fadeOut(tween(120)) },
+        ) {
             composable("stores") { StoresScreen(onOpen = { nav.navigate("store/$it") }) }
             composable("store/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
                 val id = it.arguments?.getString("id") ?: ""

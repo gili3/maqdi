@@ -90,6 +90,15 @@ fun dateTime(ms: Long?): String {
 
 fun minutesLeft(ms: Long?): Long? = ms?.let { ((it - System.currentTimeMillis()) / 60000).coerceAtLeast(0) }
 
+/** تاريخ قبل n يومًا بتوقيت الخرطوم بصيغة yyyy-MM-dd */
+fun daysAgoKhartoum(n: Int): String {
+    val cal = Calendar.getInstance(khartoum)
+    cal.add(Calendar.DAY_OF_YEAR, -n)
+    val f = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    f.timeZone = khartoum
+    return f.format(cal.time)
+}
+
 private val dayRegex = Regex("^\\d{4}-\\d{2}-\\d{2}$")
 
 /** بداية اليوم بتوقيت السودان بصيغة ISO، أو null إن كان النص غير صحيح */

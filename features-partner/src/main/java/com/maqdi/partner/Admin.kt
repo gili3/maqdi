@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import com.maqdi.core.daysAgoKhartoum
 import com.maqdi.core.Mq
 import com.maqdi.core.ActionButton
 import com.maqdi.core.Api
@@ -119,26 +120,26 @@ fun DashboardScreen() {
 // ---------- كل الطلبات ----------
 @Composable
 fun AdminOrdersScreen(onOpen: (String) -> Unit) {
-    var status by remember { mutableStateOf("all") }
+    var group by remember { mutableStateOf("all") }
     var storeId by remember { mutableStateOf("all") }
-    var from by remember { mutableStateOf("") }
-    var to by remember { mutableStateOf("") }
+    var period by remember { mutableStateOf("all") }
     val stores = rememberLoadable { Repo.allStores() }
-    val fromMs = dayStartMs(from)
-    val toMs = dayStartMs(to)?.plus(86_400_000L)
-    val orders = rememberLoadable(status, storeId, fromMs, toMs) {
-        Repo.adminOrders(if (status == "all") null else status, if (storeId == "all") null else storeId, fromMs, toMs)
+    val fromMs = if (period == "all") null else dayStartMs(daysAgoKhartoum(period.toInt() - 1))
+    val orders = rememberLoadable(group == "delivered", storeId, fromMs) {
+        Repo.adminOrders(if (group == "delivered") St.DELIVERED else null, if (storeId == "all") null else storeId, fromMs, null)
     }
     val storeOptions = listOf("all" to "كل المتاجر") + ((stores as? Loadable.Data)?.value ?: emptyList()).map { it.id to it.name }
     Screen("كل الطلبات") { pad ->
         Column(Modifier.padding(pad)) {
-            ChipRow(listOf("all" to "كل الحالات") + St.all.map { it to St.label(it) }, status) { status = it }
-            ChipRow(storeOptions, storeId) { storeId = it }
-            Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Field("من (2026-10-01)", from, { from = it }, Modifier.weight(1f))
-                Field("إلى (2026-10-31)", to, { to = it }, Modifier.weight(1f))
-            }
-            LoadableView(orders) { list ->
+            ChipRow(listOf("all" to "الكل", "open" to "جارية", "delivered" to "مسلَّمة", "closed" to "ملغاة أو فاشلة"), group) { group = it }
+            ChipRow(listOf("1" to "اليوم", "7" to "٧ أيام", "30" to "٣٠ يومًا", "all" to "كل الفترات"), period) { period = it }
+            if (storeOptions.size > 2) ChipRow(storeOptions, storeId) { storeId = it }
+            LoadableView(orders) { all ->
+                val list = when (group) {
+                    "open" -> all.filter { it.status !in St.terminal }
+                    "closed" -> all.filter { it.status in St.terminal && it.status != St.DELIVERED }
+                    else -> all
+                }
                 if (list.isEmpty()) Empty("لا توجد طلبات.")
                 else LazyColumn { items(list, key = { it.id }) { PartnerOrderRow(it, showStore = true, onOpen = onOpen) } }
             }
@@ -273,7 +274,7 @@ fun AdminMoreScreen(profile: Profile, onNav: (String) -> Unit) {
                 "a_users" to "المستخدمون والموصّلون",
                 "a_settings" to "رسوم التوصيل والمُهَل",
                 "a_expenses" to "المصروفات",
-                "a_export" to "تصدير التقارير (CSV)",
+                "a_export" to "ملخص مالي وتصدير (CSV)",
                 "a_audit" to "سجل التدقيق",
             ).forEach { (r, t) -> ActionButton(t, tonal = true) { onNav(r) } }
             Text(profile.email, color = Mq.Muted, modifier = Modifier.padding(top = 12.dp))
@@ -530,17 +531,17 @@ fun ExpensesScreen(onBack: () -> Unit) {
 @Composable
 fun ExportScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
-    var from by remember { mutableStateOf(todayKhartoum()) }
-    var to by remember { mutableStateOf(todayKhartoum()) }
+    var range by remember { mutableStateOf("7") }
+    val from = daysAgoKhartoum(range.toInt() - 1)
+    val to = todayKhartoum()
     val a = isoStart(from)
     val b = isoEndExclusive(to)
     var summary by remember { mutableStateOf<Api.Summary?>(null) }
 
     Screen("تصدير التقارير", onBack = onBack) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            Section("الفترة (بصيغة 2026-10-24)") {
-                Field("من تاريخ", from, { from = it }, keyboard = KeyboardType.Ascii)
-                Field("إلى تاريخ", to, { to = it }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Ascii)
+            Section("الفترة") {
+                ChipRow(listOf("1" to "اليوم", "7" to "٧ أيام", "30" to "٣٠ يومًا"), range) { range = it; summary = null }
                 Text("يشمل التقرير كل القيود المالية في الفترة (حتى 5000 قيد).", color = Mq.Muted, modifier = Modifier.padding(top = 6.dp))
             }
             ActionButton("عرض ملخص الفترة", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true, enabled = a != null && b != null) {

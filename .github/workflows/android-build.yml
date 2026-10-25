@@ -8,9 +8,7 @@ on:
       - "core/**"
       - "features-partner/**"
       - "app-customer/**"
-      - "app-merchant/**"
-      - "app-courier/**"
-      - "app-admin/**"
+      - "app-partner/**"
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "google-services.json"
@@ -36,7 +34,7 @@ jobs:
             exit 1
           fi
           missing=0
-          for pkg in com.maqdi.customer com.maqdi.merchant com.maqdi.courier com.maqdi.admin; do
+          for pkg in com.maqdi.customer com.maqdi.partner; do
             if ! grep -q "\"package_name\": *\"$pkg\"" google-services.json; then
               echo "::error::التطبيق $pkg غير مسجّل في google-services.json. سجّله في Firebase ثم نزّل الملف من جديد."
               missing=1
@@ -46,7 +44,7 @@ jobs:
           
       - name: Copy google-services.json into each app
         run: |
-          for app in app-customer app-merchant app-courier app-admin; do
+          for app in app-customer app-partner; do
             cp google-services.json "$app/google-services.json"
           done
 
@@ -55,7 +53,7 @@ jobs:
           gradle-version: 8.9
 
       - name: Build debug APKs
-        run: gradle :app-customer:assembleDebug :app-merchant:assembleDebug :app-courier:assembleDebug :app-admin:assembleDebug --stacktrace
+        run: gradle :app-customer:assembleDebug :app-partner:assembleDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
@@ -64,15 +62,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: maqdi-merchant-apk
-          path: app-merchant/build/outputs/apk/debug/*.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: maqdi-courier-apk
-          path: app-courier/build/outputs/apk/debug/*.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: maqdi-admin-apk
-          path: app-admin/build/outputs/apk/debug/*.apk
+          name: maqdi-partner-apk
+          path: app-partner/build/outputs/apk/debug/*.apk

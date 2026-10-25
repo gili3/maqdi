@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.maqdi.courier"
+    namespace = "com.maqdi.partnerapp" // يختلف عن namespace وحدة features-partner لتفادي التعارض
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.maqdi.courier"
+        applicationId = "com.maqdi.partner"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

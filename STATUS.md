@@ -9,11 +9,10 @@
 - Firebase Deploy، واختبارات قواعد Firestore الـ13 (تحتاج `npm install` ومحاكي Firebase).
 - ترجمة Cloud Functions كاملة (`npm install` غير ممكن). عُدّل `orders.ts` وفُحص نحويًا فقط بمكتبات وهمية، وليس فحص أنواع حقيقي.
 
-## ما يمنع نجاح البناء الآن (يحتاج منك)
-`google-services.json` يحوي `com.maqdi.customer` و`com.maqdi.partner` فقط. الحزم `com.maqdi.merchant` و`com.maqdi.courier` و`com.maqdi.admin` غير مسجّلة، وخطوة التحقق في Android Build ستفشل عمدًا. لا يمكن اختراع معرّفات التطبيقات؛ يجب:
-1. Firebase Console ← Project settings ← Add app ← Android، ثلاث مرات بالحزم أعلاه وبالبصمة SHA-1: `9E:46:BD:F3:C6:A5:E2:C0:3A:91:BB:45:B5:20:C2:0F:0A:02:D3:F7`
-2. نزّل `google-services.json` الجديد واستبدل به الملف في جذر المستودع.
-3. السرّ المطلوب لنشر Firebase: `FIREBASE_SERVICE_ACCOUNT` في GitHub ← Settings ← Secrets (JSON لحساب خدمة). لا يوضع في المستودع.
+## ما يلزم قبل البناء (محدَّث: تطبيقان فقط)
+قرّرنا تطبيقين: `com.maqdi.customer` والشركاء `com.maqdi.partner` (يعرض واجهة التاجر أو المندوب أو المدير حسب الدور). الحزمتان موجودتان في `google-services.json`، فلا تسجيل جديد مطلوب. لكن:
+1. تطبيق `partner` في الملف الحالي **بلا عميل OAuth أندرويد** (لا بصمة SHA-1)، فأضف البصمة `9E:46:BD:F3:C6:A5:E2:C0:3A:91:BB:45:B5:20:C2:0F:0A:02:D3:F7` إلى `com.maqdi.partner` في Firebase ثم نزّل `google-services.json` الجديد واستبدله. بدونها قد يفشل تسجيل Google في تطبيق الشركاء.
+2. السر المطلوب لنشر Firebase: `FIREBASE_SERVICE_ACCOUNT` في GitHub ← Settings ← Secrets (JSON لحساب خدمة). لا يوضع في المستودع.
 
 ## نتائج مراجعة القواعد (قراءة، دون تشغيل)
 - Firestore: الكتابة على الطلبات والمالية والمتاجر والمنتجات مغلقة للعملاء. المستخدم لا يغيّر دوره. الحساب الموقوف مرفوض. التاجر محصور بمتجره. لم أجد ثغرة عزل ظاهرة.

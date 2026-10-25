@@ -3,6 +3,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { OPEN_STATUSES, Status } from "./config";
 import { addEntry, bumpBalance } from "./finance";
 import { canTransition } from "./stateMachine";
+import { evaluateStatusChange, GuardOrder } from "./orderGuards";
 import {
   Actor, arr, callable, db, docId, int, loadActor, obj, oneOf, optStr, phone, readSettings, str,
   submissionKey, writeAudit,
@@ -242,16 +243,9 @@ export const changeOrderStatus = callable(async (req) => {
     const o = snap.data() as Order;
     assertAccess(actor, o);
 
-    // الضغط المزدوج أو إعادة المحاولة: لا أثر ثانٍ
-    if (o.status === to) {
-      // مندوب ثانٍ يضغط «استلمت» بعد أن استلمه غيره: خطأ صريح لا نجاح كاذب
-      if (to === "out_for_delivery" && o.courierUid !== actor.uid) throw new HttpsError("failed-precondition", "already_taken");
-      return { ok: true, status: to, alreadyApplied: true };
-    }
-    if (!canTransition(actor.role, o.status, to))
-      throw new HttpsError("failed-precondition", `transition_not_allowed:${o.status}->${to}`);
-    if (actor.role === "courier" && o.status === "out_for_delivery" && o.courierUid !== actor.uid)
-      throw new HttpsError("permission-denied", "not_your_delivery");
+    const verdict = evaluateStatusChange(actor.role, actor.uid, o as GuardOrder, to);
+    if (verdict.kind === "already_applied") return { ok: true, status: to, alreadyApplied: true };
+    if (verdict.kind === "reject") throw new HttpsError(verdict.httpCode, verdict.code);
 
     const now = Timestamp.now();
     const patch: Record<string, unknown> = { status: to, updatedAt: now, expiresAt: null };

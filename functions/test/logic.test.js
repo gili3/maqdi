@@ -77,10 +77,10 @@ test("خطة الإشعارات: من يُخطَر في كل حالة", () => {
   assert.deepEqual(to({ status: "unknown" }), []);
 });
 
-test("طلب جديد للتاجر تنبيه عاجل فقط", () => {
-  const { planFor } = require("../lib/notificationPlan");
-  const urgentOf = (status) => planFor({ status }).some((p) => p.urgent === true);
-  assert.equal(urgentOf("pending_merchant"), true);
-  for (const s of ["awaiting_customer", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery", "delivered", "cancelled"])
-    assert.equal(urgentOf(s), false, s);
+test("نصوص الإشعارات قصيرة وبلا تنبيه خاص", () => {
+  for (const s of ["pending_merchant", "awaiting_customer", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery", "delivered", "rejected", "cancelled", "expired", "delivery_failed"])
+    for (const p of planFor({ status: s })) {
+      assert.equal(p.urgent, undefined, s);
+      assert.ok(p.title.length <= 30 && p.body.length <= 45, `${s}: ${p.body}`);
+    }
 });

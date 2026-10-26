@@ -158,6 +158,7 @@ export const adminUpdateSettings = callable(async (req) => {
     updatedAt: Timestamp.now(),
   };
   if (d.maxOpenOrders !== undefined) patch.maxOpenOrders = int(d.maxOpenOrders, "maxOpenOrders", 1, 20);
+  if (d.customerCancelGraceMinutes !== undefined) patch.customerCancelGraceMinutes = int(d.customerCancelGraceMinutes, "customerCancelGraceMinutes", 0, 30);
   return db.runTransaction(async (tx) => {
     const actor = await loadActor(req, ["admin"], tx, { admin: "settings" });
     const ref = db.doc("settings/app");

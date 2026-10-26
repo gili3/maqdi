@@ -44,7 +44,6 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
     val settings = (settingsL as? Loadable.Data<Settings>)?.value ?: Settings()
     var phone by remember { mutableStateOf(profile.phone ?: "") }
     var address by remember { mutableStateOf(profile.savedAddress ?: "") }
-    var note by remember { mutableStateOf("") }
 
     Screen("السلة") { pad ->
         if (Cart.lines.isEmpty()) {
@@ -57,7 +56,7 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
             }
         } else {
             val itemsTotal = Cart.itemsTotal
-            val phoneOk = phoneRegex.matches(phone.trim())
+            val phoneOk = phone.isBlank() || phoneRegex.matches(phone.trim())
             Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                 Section("طلبك من ${Cart.storeName}") {
                     Cart.lines.values.sortedBy { it.product.name }.forEach { l ->
@@ -85,9 +84,8 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
                     )
                 }
                 Section("بيانات التوصيل") {
-                    Field("رقم الهاتف", phone, { phone = it }, keyboard = KeyboardType.Phone)
-                    Field("العنوان", address, { address = it }, Modifier.fillMaxWidth().padding(top = 8.dp))
-                    Field("وصف موقع التسليم (اختياري)", note, { note = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = false)
+                    Field("العنوان", address, { address = it }, Modifier.fillMaxWidth())
+                    Field("رقم الهاتف (اختياري)", phone, { phone = it }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Phone)
                 }
                 ActionButton(
                     "إرسال الطلب",
@@ -98,8 +96,8 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
                     // نفس البصمة = نفس معرّف الإرسال، فإعادة المحاولة بعد انقطاع الاتصال لا تنشئ طلبًا مكررًا
                     val submissionId = Prefs.submissionFor(Cart.fingerprint(phone.trim(), address.trim()))
                     val items = Cart.lines.values.map { it.product.id to it.qty }
-                    val orderId = Api.createOrder(submissionId, storeId, items, phone.trim(), address.trim(), note.trim().ifBlank { null })
-                    try { Repo.updateProfile(profile.uid, profile.name, phone.trim(), address.trim()) } catch (_: Exception) { }
+                    val orderId = Api.createOrder(submissionId, storeId, items, phone.trim(), address.trim(), null)
+                    try { Repo.updateProfile(profile.uid, profile.name, phone.trim().ifBlank { null }, address.trim()) } catch (_: Exception) { }
                     Prefs.clearSubmission()
                     Cart.clear()
                     onOrderSent(orderId)

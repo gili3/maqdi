@@ -47,6 +47,7 @@ import com.maqdi.core.Repo
 import com.maqdi.core.Screen
 import com.maqdi.core.Stepper
 import com.maqdi.core.StorageImage
+import androidx.compose.ui.draw.alpha
 import com.maqdi.core.Store
 import com.maqdi.core.categoryLabel
 import com.maqdi.core.money
@@ -97,7 +98,7 @@ fun OpenBadge(open: Boolean) {
 
 @Composable
 private fun StoreRow(s: Store, onClick: () -> Unit) {
-    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), onClick = onClick) {
+    MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).alpha(if (s.isOpen) 1f else 0.55f), onClick = onClick) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             StorageImage(s.imagePath, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
             androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))

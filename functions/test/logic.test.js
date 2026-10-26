@@ -76,3 +76,11 @@ test("خطة الإشعارات: من يُخطَر في كل حالة", () => {
   assert.deepEqual(to({ status: "delivery_failed" }), ["admins", "customer"]);
   assert.deepEqual(to({ status: "unknown" }), []);
 });
+
+test("طلب جديد للتاجر تنبيه عاجل فقط", () => {
+  const { planFor } = require("../lib/notificationPlan");
+  const urgentOf = (status) => planFor({ status }).some((p) => p.urgent === true);
+  assert.equal(urgentOf("pending_merchant"), true);
+  for (const s of ["awaiting_customer", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery", "delivered", "cancelled"])
+    assert.equal(urgentOf(s), false, s);
+});

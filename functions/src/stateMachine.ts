@@ -10,6 +10,9 @@ interface Rule {
 export const TRANSITIONS: Rule[] = [
   // مراجعة التاجر
   { from: "pending_merchant", to: "awaiting_customer", roles: ["merchant", "admin"] },
+  // قبول الطلب كما هو (نفس المنتجات والكميات والأسعار التي رآها الزبون): يدخل التجهيز مباشرة
+  // ولا يمرّ إلا عبر proposeOrder؛ حارس changeOrderStatus يرفضه لغياب لقطة الموافقة
+  { from: "pending_merchant", to: "preparing", roles: ["merchant", "admin"] },
   { from: "pending_merchant", to: "rejected", roles: ["merchant", "admin"] },
   { from: "pending_merchant", to: "cancelled", roles: ["customer", "admin"] },
   { from: "pending_merchant", to: "expired", roles: ["system"] },
@@ -26,7 +29,8 @@ export const TRANSITIONS: Rule[] = [
 
   { from: "preparing", to: "ready_for_pickup", roles: ["merchant", "admin"] },
   { from: "preparing", to: "awaiting_customer", roles: ["merchant", "admin"] },
-  { from: "preparing", to: "cancelled", roles: ["merchant", "admin"] },
+  // الزبون يلغي في التجهيز فقط خلال مهلة قصيرة (يفرضها الحارس في orderGuards)
+  { from: "preparing", to: "cancelled", roles: ["customer", "merchant", "admin"] },
 
   // التوصيل
   { from: "ready_for_pickup", to: "out_for_delivery", roles: ["courier", "admin"] },

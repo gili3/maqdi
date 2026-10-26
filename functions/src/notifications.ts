@@ -49,12 +49,21 @@ export const onOrderChanged = onDocumentWritten({ document: "orders/{orderId}", 
       // 2) إشعار الدفع FCM
       const tokens = [...new Set(rs.flatMap((r) => r.tokens))].slice(0, 500);
       if (tokens.length > 0) {
-        await getMessaging().sendEachForMulticast({
-          tokens,
-          notification: { title: plan.title, body: plan.body },
-          data: { orderId, status: String(after.status) },
-          android: { priority: "high" },
-        });
+        if (plan.urgent) {
+          // رسالة بيانات فقط: يبني التطبيق الإشعار بنفسه بصوت منبّه متكرر، حتى والتطبيق مغلق
+          await getMessaging().sendEachForMulticast({
+            tokens,
+            data: { orderId, status: String(after.status), title: plan.title, body: plan.body, alert: "urgent" },
+            android: { priority: "high", ttl: 15 * 60 * 1000 },
+          });
+        } else {
+          await getMessaging().sendEachForMulticast({
+            tokens,
+            notification: { title: plan.title, body: plan.body },
+            data: { orderId, status: String(after.status) },
+            android: { priority: "high" },
+          });
+        }
       }
     } catch (e) {
       console.error("notification_failed", plan.to, e instanceof Error ? e.message : "unknown");

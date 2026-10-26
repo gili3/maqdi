@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS = {
   customerApprovalMinutes: 30,
   ordersEnabled: true,
   maxOpenOrders: 3, // أقصى عدد طلبات مفتوحة لكل زبون
+  customerCancelGraceMinutes: 3, // مهلة إلغاء الزبون بعد أن يقبل التاجر ويبدأ التجهيز (0 = لا إلغاء)
 };
 
 // السودان UTC+2 (بدون توقيت صيفي)

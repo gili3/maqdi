@@ -12,6 +12,11 @@ import com.maqdi.partner.MerchantApp
 
 /** تطبيق الشركاء: واجهة واحدة تختار الشاشات حسب دور الحساب (تاجر، مندوب، مدير). الزبون مرفوض. */
 class MainActivity : ComponentActivity() {
+    override fun onResume() {
+        super.onResume()
+        Notifier.clearAll(this) // فتح التطبيق يوقف التنبيه المتكرر
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Notifier.createChannel(this)

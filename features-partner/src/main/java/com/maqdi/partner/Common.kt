@@ -39,7 +39,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
-fun PartnerOrderRow(o: Order, showStore: Boolean, onOpen: (String) -> Unit) {
+fun PartnerOrderRow(o: Order, showStore: Boolean, onOpen: (String) -> Unit, trailing: (@Composable () -> Unit)? = null) {
     MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable { onOpen(o.id) }) {
         Column(Modifier.padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -52,6 +52,7 @@ fun PartnerOrderRow(o: Order, showStore: Boolean, onOpen: (String) -> Unit) {
             Text((if (o.totalsAreEstimate) "تقريبي: " else "") + money(o.total), color = MaterialTheme.colorScheme.primary)
             Text(o.address, color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
             Text(dateTime(o.createdAt) + if (o.isTest) " • تجريبي" else "", color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+            if (trailing != null) Column(Modifier.padding(top = 8.dp)) { trailing() }
         }
     }
 }

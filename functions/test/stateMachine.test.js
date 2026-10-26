@@ -3,10 +3,12 @@ const assert = require("node:assert");
 const { canTransition, TRANSITIONS } = require("../lib/stateMachine");
 const { STATUSES } = require("../lib/config");
 
-test("التاجر لا يبدأ التجهيز قبل موافقة الزبون", () => {
-  assert.equal(canTransition("merchant", "pending_merchant", "preparing"), false);
+test("التاجر لا يبدأ التجهيز بعد تعديل المراجعة إلا بموافقة الزبون", () => {
   assert.equal(canTransition("merchant", "awaiting_customer", "preparing"), false);
+  assert.equal(canTransition("courier", "pending_merchant", "preparing"), false);
+  assert.equal(canTransition("customer", "pending_merchant", "preparing"), false);
   assert.equal(canTransition("merchant", "confirmed", "preparing"), true);
+  assert.equal(canTransition("merchant", "pending_merchant", "preparing"), true); // القبول بلا تغيير
 });
 
 test("الموافقة على الإجمالي للزبون فقط", () => {
@@ -38,8 +40,8 @@ test("الحالات النهائية لا تخرج منها أي انتقالا
     assert.equal(TRANSITIONS.some((r) => r.from === t), false, t);
 });
 
-test("الزبون لا يلغي بعد بدء التجهيز", () => {
-  assert.equal(canTransition("customer", "preparing", "cancelled"), false);
+test("الزبون لا يلغي بعد الجاهزية (والتجهيز مقيّد بمهلة في الحارس)", () => {
+  assert.equal(canTransition("customer", "preparing", "cancelled"), true);
   assert.equal(canTransition("customer", "ready_for_pickup", "cancelled"), false);
   assert.equal(canTransition("customer", "confirmed", "cancelled"), true);
 });

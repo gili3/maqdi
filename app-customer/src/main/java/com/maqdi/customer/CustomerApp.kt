@@ -97,7 +97,7 @@ fun CustomerApp(profile: Profile) {
             }
             composable("orders") { OrdersScreen(profile.uid, onOpen = { push("order/$it") }) }
             composable("order/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
-                OrderDetailScreen(it.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+                OrderDetailScreen(it.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() }, onReorder = { go("cart") })
             }
             composable("account") { AccountScreen(profile) }
         }

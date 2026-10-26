@@ -1,7 +1,6 @@
 package com.maqdi.partner
 
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Inventory2
@@ -37,15 +36,19 @@ fun MerchantApp(profile: Profile) {
         return
     }
     val nav = rememberNavController()
+    val accountTab = Tab("m_account", "حسابي", Icons.Default.Storefront)
+    // تبويبان فقط في الشريط السفلي (الطلبات والمنتجات)؛ التقارير والحساب في القائمة الجانبية
     val tabs = listOfNotNull(
         if (profile.can("orders")) Tab("m_orders", "الطلبات", Icons.AutoMirrored.Filled.ReceiptLong) else null,
         if (profile.can("products")) Tab("m_products", "المنتجات", Icons.Default.Inventory2) else null,
+    ).ifEmpty { listOf(accountTab) }
+    val extras = listOfNotNull(
         if (profile.can("reports")) Tab("m_reports", "التقارير", Icons.Default.Assessment) else null,
-        Tab("m_account", "حسابي", Icons.Default.Storefront),
+        accountTab.takeIf { it !in tabs },
     )
     AppShell(
         profile, onOpenOrder = { nav.push("order/$it") },
-        menu = listOf(MqDrawerSection(null, tabs), MqDrawerSection(null, listOf(MqNavItem("profile", "الملف الشخصي", Icons.Default.AccountCircle)))),
+        menu = listOf(MqDrawerSection(null, tabs + extras), MqDrawerSection(null, listOf(MqNavItem("profile", "الملف الشخصي", Icons.Default.AccountCircle)))),
         currentRoute = nav.currentRoute(),
         onMenuNavigate = { nav.menuGo(it, tabs, tabs.first().route) },
     ) {
@@ -53,7 +56,7 @@ fun MerchantApp(profile: Profile) {
             composable("profile") { MeScreen(profile, onBack = { nav.popBackStack() }) }
             composable("m_orders") { MerchantOrdersScreen(profile, onOpen = { nav.push("order/$it") }) }
             composable("m_products") { MerchantProductsScreen(profile) }
-            composable("m_reports") { ReportScreen("merchant", "تقارير المتجر") }
+            composable("m_reports") { ReportScreen("merchant", "تقارير المتجر", onBack = { nav.popBackStack() }) }
             composable("m_account") { if (profile.can("balance")) StoreAccountScreen(profile.storeId ?: "", profile.name, onProfile = { nav.push("profile") }) else MeScreen(profile) }
             orderRoute(nav, profile)
         }
@@ -66,20 +69,19 @@ fun CourierApp(profile: Profile) {
     val nav = rememberNavController()
     val tabs = listOfNotNull(
         if (profile.can("deliveries")) Tab("c_deliveries", "التوصيل", Icons.Default.LocalShipping) else null,
-        if (profile.can("deliveries")) Tab("c_history", "سجلي", Icons.Default.History) else null,
-        if (profile.can("reports")) Tab("c_reports", "التقارير", Icons.Default.Assessment) else null,
         Tab("me", "أنا", Icons.Default.Person),
     )
+    val reportsItem = if (profile.can("reports")) listOf(Tab("c_reports", "التقارير", Icons.Default.Assessment)) else emptyList()
     AppShell(
         profile, onOpenOrder = { nav.push("order/$it") },
-        menu = listOf(MqDrawerSection(null, tabs)),
+        menu = listOf(MqDrawerSection(null, tabs + reportsItem)),
         currentRoute = nav.currentRoute(),
         onMenuNavigate = { nav.menuGo(it, tabs, tabs.first().route) },
     ) {
         TabScaffold(nav, tabs, tabs.first().route) {
             composable("c_deliveries") { CourierScreen(profile, onOpen = { nav.push("order/$it") }) }
             composable("c_history") { CourierHistoryScreen(profile, onOpen = { nav.push("order/$it") }) }
-            composable("c_reports") { ReportScreen("courier", "تقارير توصيلاتي") }
+            composable("c_reports") { ReportScreen("courier", "تقارير توصيلاتي", onBack = { nav.popBackStack() }) }
             composable("me") { MeScreen(profile) }
             orderRoute(nav, profile)
         }
@@ -111,7 +113,7 @@ fun AdminApp(profile: Profile) {
             composable("a_dashboard") { DashboardScreen() }
             composable("a_orders") { AdminOrdersScreen(onOpen = { nav.push("order/$it") }) }
             composable("c_deliveries") { CourierScreen(profile, onOpen = { nav.push("order/$it") }) }
-            composable("a_finance") { FinanceScreen(onStore = { nav.push("fin_store/$it") }) }
+            composable("a_finance") { FinanceScreen(profile, onStore = { nav.push("fin_store/$it") }, onNav = { nav.push(it) }) }
             composable("a_more") { AdminMoreScreen(profile, onNav = { nav.push(it) }) }
             composable("a_reports") { ReportScreen("admin", "تقارير المنصة", onBack = { nav.popBackStack() }) }
             composable("a_stores") { AdminStoresScreen(onBack = { nav.popBackStack() }, onProducts = { nav.push("a_products/$it") }) }
@@ -120,7 +122,7 @@ fun AdminApp(profile: Profile) {
             }
             composable("a_categories") { AdminCategoriesScreen(onBack = { nav.popBackStack() }) }
             composable("a_users") { AdminUsersScreen(profile, onBack = { nav.popBackStack() }) }
-            composable("a_settings") { AdminSettingsScreen(onBack = { nav.popBackStack() }) }
+            composable("a_settings") { AdminSettingsScreen(onBack = { nav.popBackStack() }, onAudit = if (profile.can("audit")) ({ nav.push("a_audit") }) else null) }
             composable("a_audit") { AuditScreen(onBack = { nav.popBackStack() }) }
             composable("a_expenses") { ExpensesScreen(onBack = { nav.popBackStack() }) }
             composable("a_export") { ExportScreen(onBack = { nav.popBackStack() }) }
@@ -140,7 +142,7 @@ fun adminMenuItems(profile: Profile): List<MqNavItem> = listOf(
     MqNavItem("a_users", "المستخدمون والصلاحيات", Icons.Default.People) to
         (profile.can("users") || profile.can("permissions") || profile.can("grant_admin")),
     MqNavItem("a_settings", "رسوم التوصيل والمُهَل", Icons.Default.Tune) to profile.can("settings"),
-    MqNavItem("a_expenses", "المصروفات", Icons.Default.Payments) to profile.can("expenses"),
-    MqNavItem("a_export", "ملخص مالي وتصدير (CSV)", Icons.Default.FileDownload) to profile.can("finance"),
-    MqNavItem("a_audit", "سجل التدقيق", Icons.Default.Security) to profile.can("audit"),
+    // المصروفات والتصدير داخل تبويب «المالية»، وسجل التدقيق داخل «الرسوم والمُهَل»؛ تظهر هنا فقط لمن لا يملك ذلك التبويب
+    MqNavItem("a_expenses", "المصروفات", Icons.Default.Payments) to (profile.can("expenses") && !profile.can("finance")),
+    MqNavItem("a_audit", "سجل التدقيق", Icons.Default.Security) to (profile.can("audit") && !profile.can("settings")),
 ).filter { it.second }.map { it.first }

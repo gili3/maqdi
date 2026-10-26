@@ -4,9 +4,9 @@ import { OPEN_STATUSES, Status } from "./config";
 import { addEntry, bumpBalance } from "./finance";
 import { canTransition } from "./stateMachine";
 import { permissionForStatusChange } from "./permissions";
-import { evaluateStatusChange, GuardOrder } from "./orderGuards";
+import { evaluateStatusChange, GuardOrder, isNoWorseReview } from "./orderGuards";
 import {
-  Actor, arr, callable, db, docId, int, loadActor, obj, oneOf, optStr, phone, readSettings, str,
+  Actor, arr, callable, db, docId, int, loadActor, obj, oneOf, optStr, optPhone, readSettings, str,
   submissionKey, writeAudit,
 } from "./util";
 
@@ -43,7 +43,7 @@ export const createOrder = callable(async (req) => {
     const pid = docId(it.productId, "productId");
     merged.set(pid, Math.min(99, (merged.get(pid) ?? 0) + int(it.qty, "qty", 1, 99)));
   }
-  const customerPhone = phone(d.phone);
+  const customerPhone = optPhone(d.phone);
   const address = str(d.address, "address", 3, 300);
   const locationNote = optStr(d.locationNote, "locationNote", 300);
 
@@ -158,6 +158,28 @@ export const proposeOrder = callable(async (req) => {
     const now = Timestamp.now();
     const changedAfterApproval = o.status !== "pending_merchant";
 
+    // قبول مباشر: نفس المنتجات والكميات وبأسعار مساوية أو أقل مما رآه الزبون، فلا حاجة لموافقة ثانية
+    if (o.status === "pending_merchant" && isNoWorseReview(o.requestedItems, lines)) {
+      const proposal = { items: lines, itemsTotal, deliveryFee, discount, total, note, revision, proposedAt: now, proposedBy: actor.uid };
+      tx.update(ref, {
+        status: "preparing",
+        proposal,
+        approvedSnapshot: { ...proposal, approvedAt: now, approvedBy: o.customerId, autoApproved: true },
+        approvedAt: now,
+        preparingAt: now,
+        preparingBy: actor.uid,
+        itemsTotal,
+        total,
+        totalsAreEstimate: false,
+        revision,
+        updatedAt: now,
+        expiresAt: null,
+      });
+      history(tx, orderId, actor, o.status, "preparing", { revision, autoApproved: true });
+      writeAudit(tx, actor, "accept_order", "order", orderId, { revision, itemsTotal, total, autoApproved: true });
+      return { ok: true, revision, autoAccepted: true };
+    }
+
     tx.update(ref, {
       status: "awaiting_customer",
       proposal: { items: lines, itemsTotal, deliveryFee, discount, total, note, revision, proposedAt: now, proposedBy: actor.uid },
@@ -246,7 +268,14 @@ export const changeOrderStatus = callable(async (req) => {
     const o = snap.data() as Order;
     assertAccess(actor, o);
 
-    const verdict = evaluateStatusChange(actor.role, actor.uid, o as GuardOrder, to);
+    const settings = await readSettings(tx);
+    const preparingAt = o.preparingAt as Timestamp | null | undefined;
+    const verdict = evaluateStatusChange(
+      actor.role, actor.uid,
+      { ...(o as GuardOrder), preparingAtMs: preparingAt ? preparingAt.toMillis() : null },
+      to,
+      { nowMs: Date.now(), cancelGraceMs: ((settings.customerCancelGraceMinutes as number) ?? 3) * 60_000 },
+    );
     if (verdict.kind === "already_applied") return { ok: true, status: to, alreadyApplied: true };
     if (verdict.kind === "reject") throw new HttpsError(verdict.httpCode, verdict.code);
 

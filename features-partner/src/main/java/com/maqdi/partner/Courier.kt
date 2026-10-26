@@ -20,9 +20,17 @@ import com.maqdi.core.rememberLoadable
 /** سجل توصيلات المندوب مع ملخص المبالغ التي حصّلها */
 @Composable
 fun CourierHistoryScreen(profile: Profile, onOpen: (String) -> Unit) {
-    val orders = rememberLoadable(profile.uid) { Repo.courierDeliveries(profile.uid) }
     Screen("سجل توصيلاتي") { pad ->
-        Column(Modifier.padding(pad)) {
+        Column(Modifier.padding(pad)) { CourierHistoryContent(profile, onOpen) }
+    }
+}
+
+/** محتوى السجل بلا إطار شاشة، ليُعرض داخل تبويب التوصيل */
+@Composable
+fun CourierHistoryContent(profile: Profile, onOpen: (String) -> Unit) {
+    val orders = rememberLoadable(profile.uid) { Repo.courierDeliveries(profile.uid) }
+    Column {
+        run {
             LoadableView(orders) { list ->
                 if (list.isEmpty()) Empty("لا توجد توصيلات بعد.")
                 else {

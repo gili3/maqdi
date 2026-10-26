@@ -16,6 +16,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,7 +33,6 @@ import com.maqdi.core.Empty
 import com.maqdi.core.InfoRow
 import com.maqdi.core.LoadableView
 import com.maqdi.core.Order
-import com.maqdi.core.ReasonDialog
 import com.maqdi.core.Repo
 import com.maqdi.core.Screen
 import com.maqdi.core.Section
@@ -43,6 +43,8 @@ import com.maqdi.core.dateTime
 import com.maqdi.core.minutesLeft
 import com.maqdi.core.money
 import com.maqdi.core.rememberLoadable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 @Composable
 fun OrdersScreen(uid: String, onOpen: (String) -> Unit) {
@@ -74,22 +76,31 @@ fun OrdersScreen(uid: String, onOpen: (String) -> Unit) {
 }
 
 @Composable
-fun OrderDetailScreen(orderId: String, onBack: () -> Unit) {
+fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onReorder: () -> Unit = {}) {
     val order = rememberLoadable(orderId) { Repo.order(orderId) }
     Screen("تفاصيل الطلب", onBack = onBack) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             LoadableView(order) { o ->
-                if (o == null) Empty("الطلب غير موجود.") else OrderBody(o)
+                if (o == null) Empty("الطلب غير موجود.") else OrderBody(o, onReorder)
             }
         }
     }
 }
 
 @Composable
-private fun OrderBody(o: Order) {
+private fun OrderBody(o: Order, onReorder: () -> Unit) {
     var showDecline by remember { mutableStateOf(false) }
     var showCancel by remember { mutableStateOf(false) }
     var showApprove by remember { mutableStateOf(false) }
+
+    // مهلة الإلغاء بعد قبول التاجر وبدء التجهيز (من إعدادات الإدارة)
+    val settingsL = rememberLoadable { Repo.settings() }
+    val graceMs = ((settingsL as? com.maqdi.core.Loadable.Data<com.maqdi.core.Settings>)?.value?.customerCancelGraceMinutes ?: 3L) * 60_000L
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(o.status) { while (o.status == St.PREPARING) { delay(10_000); now = System.currentTimeMillis() } }
+    val prepAt = o.preparingAt
+    val cancelLeftMs = if (o.status == St.PREPARING && prepAt != null && graceMs > 0) graceMs - (now - prepAt) else 0L
+    val canCancelPreparing = cancelLeftMs > 0
 
     Column(Modifier.fillMaxSize()) {
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -141,13 +152,34 @@ private fun OrderBody(o: Order) {
         }
 
         Section("التوصيل") {
-            InfoRow("الهاتف", o.customerPhone)
+            if (o.customerPhone.isNotBlank()) InfoRow("الهاتف", o.customerPhone)
             InfoRow("العنوان", o.address)
             o.locationNote?.let { InfoRow("وصف الموقع", it) }
             o.courierName?.let { InfoRow("الموصّل", it) }
         }
 
-        if (o.status == St.PENDING || o.status == St.CONFIRMED) {
+        if (o.status in St.terminal) {
+            // إعادة الطلب: يملأ السلة بنفس المنتجات المتوفرة الآن ثم يفتح السلة
+            ActionButton("اطلب مرة أخرى", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                val products = Repo.products(o.storeId).first()
+                Cart.clear()
+                var added = 0
+                o.shownLines.forEach { l ->
+                    val p = products.firstOrNull { it.id == l.productId && it.isAvailable } ?: return@forEach
+                    val qty = minOf(l.qty.toInt(), (p.stockQty ?: 99L).toInt(), 99)
+                    if (qty > 0) { Cart.set(p, o.storeName, qty); added++ }
+                }
+                if (added == 0) throw com.maqdi.core.ApiException("منتجات هذا الطلب غير متوفرة الآن.")
+                onReorder()
+            }
+        }
+        if (canCancelPreparing) {
+            Text(
+                "قبِل المتجر طلبك وبدأ التجهيز. يمكنك الإلغاء خلال ${((cancelLeftMs + 59_999) / 60_000).coerceAtLeast(1)} دقيقة فقط.",
+                color = Mq.Muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
+        if (o.status == St.PENDING || o.status == St.CONFIRMED || canCancelPreparing) {
             ActionButton("إلغاء الطلب", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true) {
                 showCancel = true
             }
@@ -181,8 +213,8 @@ private fun OrderBody(o: Order) {
         ) { Api.respond(o.id, o.revision, false) }
     }
     if (showCancel) {
-        ReasonDialog("إلغاء الطلب", "تأكيد الإلغاء", onDismiss = { showCancel = false }) { reason ->
-            Api.changeStatus(o.id, St.CANCELLED, reason)
+        ConfirmDialog("إلغاء الطلب", "هل تريد إلغاء الطلب؟", "نعم، ألغِ", onDismiss = { showCancel = false }) {
+            Api.changeStatus(o.id, St.CANCELLED, "ألغاه الزبون")
         }
     }
 }

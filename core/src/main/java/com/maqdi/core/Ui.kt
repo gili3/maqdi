@@ -426,7 +426,8 @@ fun StorageImage(path: String?, modifier: Modifier = Modifier) {
         }
         val u = url
         if (u == null) Box(modifier.then(placeholder)) else AsyncImage(
-            model = u, contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop,
+            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current).data(u).crossfade(true).build(),
+            contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop,
         )
     }
 }

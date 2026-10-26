@@ -299,11 +299,33 @@ export const adminDashboard = callable(async (req) => {
       return r.data().total ?? 0;
     }, null);
   const [rev, cash] = await Promise.all([sumFor("delivery_revenue"), sumFor("cash")]);
+
+  // ملخص آخر اليوم: عدد التسليمات ومستحق كل متجر من طلبات اليوم
+  const day = await safely<{ delivered: number; stores: { storeId: string; amount: number }[] } | null>("dashboard_day", async () => {
+    const snap = await db
+      .collection("financial_entries")
+      .where("ledger", "==", "store_payable")
+      .where("createdAt", ">=", startTs)
+      .limit(500)
+      .get();
+    const per: Record<string, number> = {};
+    let delivered = 0;
+    snap.docs.forEach((d) => {
+      const e = d.data();
+      per[e.storeId as string] = (per[e.storeId as string] ?? 0) + (Number(e.amount) || 0);
+      if (e.type === "order_delivered") delivered++;
+    });
+    return { delivered, stores: Object.entries(per).map(([storeId, amount]) => ({ storeId, amount })) };
+  }, null);
+  if (!day.ok) failedParts++;
   if (!rev.ok) failedParts++;
   if (!cash.ok) failedParts++;
   // لا شيء نعرضه: نُبلغ العميل بخطأ صريح بدل لوحة فارغة مضلِّلة
   if (Object.keys(counts).length === 0 && !rev.ok && !cash.ok) throw new HttpsError("failed-precondition", "data_unavailable");
 
   const settings = (await safely("dashboard_settings", () => readSettings(), null)).value;
-  return { ordersByStatus: counts, deliveryRevenueToday: rev.value, cashToday: cash.value, settings, partial: failedParts > 0 };
+  return {
+    ordersByStatus: counts, deliveryRevenueToday: rev.value, cashToday: cash.value, settings, partial: failedParts > 0,
+    deliveredToday: day.value?.delivered ?? null, storePayablesToday: day.value?.stores ?? [],
+  };
 });

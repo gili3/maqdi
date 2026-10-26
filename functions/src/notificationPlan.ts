@@ -1,12 +1,12 @@
 export type Target = "customer" | "merchants" | "couriers" | "admins";
-export interface Plan { to: Target; title: string; body: string }
+export interface Plan { to: Target; title: string; body: string; urgent?: boolean }
 
 /** من يُخطَر عند وصول الطلب إلى حالة جديدة (دالة نقية قابلة للاختبار) */
 export function planFor(after: Record<string, unknown>): Plan[] {
-  const p = (to: Target, title: string, body: string): Plan => ({ to, title, body });
+  const p = (to: Target, title: string, body: string, urgent = false): Plan => (urgent ? { to, title, body, urgent } : { to, title, body });
   switch (after.status) {
     case "pending_merchant":
-      return [p("merchants", "طلب جديد", "وصلك طلب جديد، راجعه الآن.")];
+      return [p("merchants", "طلب جديد", "وصلك طلب جديد، راجعه الآن.", true)];
     case "awaiting_customer":
       return [p("customer", "راجع إجمالي طلبك", "راجع التاجر طلبك. وافق على الإجمالي ليبدأ التجهيز.")];
     case "confirmed":

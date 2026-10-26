@@ -101,6 +101,7 @@ fun DashboardScreen() {
     var err by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var tick by remember { mutableStateOf(0) }
+    val dayStores = rememberLoadable { Repo.allStores() }
     LaunchedEffect(tick) {
         loading = true
         err = null
@@ -131,9 +132,26 @@ fun DashboardScreen() {
                     "بعض الأرقام غير متاحة الآن (قد تكون الفهارس قيد الإنشاء). المعروض صحيح، والباقي يظهر بعد التحديث.",
                     color = Mq.Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
-                Section("اليوم") {
-                    InfoRow("إيراد التوصيل", d.deliveryRevenueToday?.let { money(it) } ?: "غير متاح", bold = true)
-                    InfoRow("النقد المحصَّل", d.cashToday?.let { money(it) } ?: "غير متاح")
+                val ctx = LocalContext.current
+                val storeNames = ((dayStores as? Loadable.Data<List<Store>>)?.value ?: emptyList()).associate { it.id to it.name }
+                Section("ملخص اليوم") {
+                    InfoRow("الطلبات المسلَّمة", d.deliveredToday?.toString() ?: "غير متاح")
+                    InfoRow("النقد المحصَّل", d.cashToday?.let { money(it) } ?: "غير متاح", bold = true)
+                    InfoRow("إيراد التوصيل", d.deliveryRevenueToday?.let { money(it) } ?: "غير متاح")
+                    if (d.storePayablesToday.isNotEmpty()) {
+                        Text("مستحق المتاجر من طلبات اليوم", color = Mq.Muted, modifier = Modifier.padding(top = 8.dp))
+                        d.storePayablesToday.sortedByDescending { it.second }.forEach { (id, amt) -> InfoRow(storeNames[id] ?: id, money(amt)) }
+                    }
+                    ActionButton("مشاركة الملخص", Modifier.fillMaxWidth().padding(top = 8.dp), tonal = true) {
+                        val text = buildString {
+                            append("ملخص مقضي اليوم\n")
+                            append("الطلبات المسلَّمة: ${d.deliveredToday ?: "-"}\n")
+                            append("النقد المحصَّل: ${d.cashToday?.let { money(it) } ?: "-"}\n")
+                            append("إيراد التوصيل: ${d.deliveryRevenueToday?.let { money(it) } ?: "-"}\n")
+                            d.storePayablesToday.sortedByDescending { it.second }.forEach { (id, amt) -> append("${storeNames[id] ?: id}: ${money(amt)}\n") }
+                        }
+                        ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }, "مشاركة الملخص"))
+                    }
                 }
                 Section("الطلبات حسب الحالة") {
                     St.all.forEach { s ->
@@ -179,12 +197,16 @@ fun AdminOrdersScreen(onOpen: (String) -> Unit) {
 
 // ---------- المالية ----------
 @Composable
-fun FinanceScreen(onStore: (String) -> Unit) {
+fun FinanceScreen(profile: Profile, onStore: (String) -> Unit, onNav: (String) -> Unit = {}) {
     val balances = rememberLoadable { Repo.balances() }
     val stores = rememberLoadable { Repo.allStores() }
     val names = ((stores as? Loadable.Data)?.value ?: emptyList()).associate { it.id to it.name }
     Screen("المالية") { pad ->
         Column(Modifier.padding(pad)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (profile.can("expenses")) ActionButton("المصروفات", Modifier.weight(1f), tonal = true) { onNav("a_expenses") }
+                ActionButton("ملخص وتصدير", Modifier.weight(1f), tonal = true) { onNav("a_export") }
+            }
             LoadableView(balances) { list ->
                 val owed = list.sumOf { it.outstanding }
                 Section("مستحقات المتاجر عليك") {
@@ -636,28 +658,31 @@ private fun RoleDialog(u: UserRow, actor: Profile, stores: List<Store>, onDismis
 
 // ---------- الإعدادات ----------
 @Composable
-fun AdminSettingsScreen(onBack: () -> Unit) {
+fun AdminSettingsScreen(onBack: () -> Unit, onAudit: (() -> Unit)? = null) {
     val settings = rememberLoadable { Repo.settings() }
     Screen("الرسوم والمُهَل", onBack = onBack) { pad ->
         Column(Modifier.padding(pad)) {
-            LoadableView(settings) { s -> SettingsForm(s) }
+            LoadableView(settings) { s -> SettingsForm(s, onAudit) }
         }
     }
 }
 
 @Composable
-private fun SettingsForm(s: Settings) {
+private fun SettingsForm(s: Settings, onAudit: (() -> Unit)? = null) {
     var fee by remember(s) { mutableStateOf(s.deliveryFee.toString()) }
     var merchantMin by remember(s) { mutableStateOf(s.merchantReviewMinutes.toString()) }
     var customerMin by remember(s) { mutableStateOf(s.customerApprovalMinutes.toString()) }
     var enabled by remember(s) { mutableStateOf(s.ordersEnabled) }
     var maxOpen by remember(s) { mutableStateOf(s.maxOpenOrders.toString()) }
+    var grace by remember(s) { mutableStateOf(s.customerCancelGraceMinutes.toString()) }
     var saved by remember { mutableStateOf(false) }
     val feeV = fee.toLongOrNull()
     val mV = merchantMin.toLongOrNull()
     val cV = customerMin.toLongOrNull()
     val oV = maxOpen.toLongOrNull()
-    val valid = feeV != null && feeV in 0..1_000_000 && mV != null && mV in 1..1440 && cV != null && cV in 1..1440 && oV != null && oV in 1..20
+    val gV = grace.toLongOrNull()
+    val valid = feeV != null && feeV in 0..1_000_000 && mV != null && mV in 1..1440 && cV != null && cV in 1..1440 && oV != null && oV in 1..20 &&
+        gV != null && gV in 0..30
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Section("رسوم التوصيل") {
@@ -673,16 +698,21 @@ private fun SettingsForm(s: Settings) {
             Field("أقصى عدد (1 إلى 20)", maxOpen, { maxOpen = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
             Text("يمنع زبونًا واحدًا من إغراق المتاجر بطلبات مفتوحة. يُحتسب كل طلب لم يُسلَّم أو يُلغَ بعد.", color = Mq.Muted)
         }
+        Section("مهلة إلغاء الزبون بعد قبول المتجر") {
+            Field("بالدقائق (0 = لا إلغاء بعد القبول)", grace, { grace = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
+            Text("بعد أن يقبل التاجر ويبدأ التجهيز، يستطيع الزبون الإلغاء خلال هذه المدة فقط.", color = Mq.Muted)
+        }
         Section("استقبال الطلبات") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("استقبال الطلبات مفعّل"); Switch(checked = enabled, onCheckedChange = { enabled = it; saved = false })
             }
         }
         ActionButton("حفظ", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), enabled = valid) {
-            Api.adminUpdateSettings(Settings(feeV ?: 0, mV ?: 15, cV ?: 30, enabled, oV ?: 3))
+            Api.adminUpdateSettings(Settings(feeV ?: 0, mV ?: 15, cV ?: 30, enabled, oV ?: 3, gV ?: 3))
             saved = true
         }
         if (saved) Text("تم الحفظ.", modifier = Modifier.padding(16.dp), color = Mq.Green)
+        if (onAudit != null) ActionButton("سجل التدقيق", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true) { onAudit() }
     }
 }
 

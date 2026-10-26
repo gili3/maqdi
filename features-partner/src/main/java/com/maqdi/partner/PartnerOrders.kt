@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -84,17 +85,46 @@ fun MerchantOrdersScreen(profile: Profile, onOpen: (String) -> Unit) {
 @Composable
 fun CourierScreen(profile: Profile, onOpen: (String) -> Unit) {
     var filter by remember { mutableStateOf("ready") }
+    var deliverFor by remember { mutableStateOf<Order?>(null) }
     val orders = rememberLoadable { Repo.courierOrders(profile.uid, profile.role == "admin") }
     Screen("التوصيل") { pad ->
         Column(Modifier.padding(pad)) {
-            ChipRow(listOf("ready" to "جاهزة للاستلام", "out" to "قيد التوصيل"), filter) { filter = it }
-            LoadableView(orders) { list ->
+            ChipRow(listOf("ready" to "جاهزة للاستلام", "out" to "قيد التوصيل", "history" to "سجلي"), filter) { filter = it }
+            if (filter == "history") {
+                CourierHistoryContent(profile, onOpen)
+            } else LoadableView(orders) { list ->
                 val shown = list
                     .filter { if (filter == "ready") it.status == St.READY else it.status == St.OUT && (profile.role == "admin" || it.courierUid == profile.uid) }
                     .sortedBy { it.createdAt ?: 0L }
                 if (shown.isEmpty()) Empty(if (filter == "ready") "لا توجد طلبات جاهزة الآن." else "لا توجد توصيلات جارية.")
-                else LazyColumn { items(shown, key = { it.id }) { PartnerOrderRow(it, showStore = true, onOpen = onOpen) } }
+                else {
+                    // الجاهزة تُجمَّع حسب المتجر ليستلم المندوب طلبات الدكان الواحد في مشوار واحد
+                    val groups: List<Pair<String?, List<Order>>> =
+                        if (filter == "ready") shown.groupBy { it.storeName }.map { (k, v) -> k to v } else listOf(null to shown)
+                    LazyColumn {
+                        groups.forEach { (store, os) ->
+                            if (store != null) item(key = "store_$store") {
+                                Text(
+                                    "$store • ${os.size} " + (if (os.size == 1) "طلب" else "طلبات"),
+                                    style = MaterialTheme.typography.titleSmall, color = Mq.Muted,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                )
+                            }
+                            items(os, key = { it.id }) { o ->
+                                // إجراء سريع من القائمة بلا فتح التفاصيل
+                                PartnerOrderRow(o, showStore = true, onOpen = onOpen, trailing = {
+                                    if (o.status == St.READY) ActionButton("استلمت الطلب") { Api.changeStatus(o.id, St.OUT) }
+                                    else ActionButton("تم التسليم وتحصيل ${money(o.total)}") { deliverFor = o }
+                                })
+                            }
+                        }
+                    }
+                }
             }
+        }
+        deliverFor?.let { d ->
+            ConfirmDialog("تأكيد التسليم", "هل استلمت ${money(d.total)} نقدًا من الزبون؟ لا يمكن التراجع.", "نعم، تم التحصيل",
+                onDismiss = { deliverFor = null }) { Api.changeStatus(d.id, St.DELIVERED) }
         }
     }
 }
@@ -137,7 +167,7 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
                 StatusChip(o.status)
             }
             StatusSteps(o.status)
-            InfoRow("الهاتف", o.customerPhone)
+            if (o.customerPhone.isNotBlank()) InfoRow("الهاتف", o.customerPhone)
             if (courierish) {
                 Text("العنوان", color = Mq.Muted, modifier = Modifier.padding(top = 4.dp))
                 Text(o.address, style = MaterialTheme.typography.titleMedium)
@@ -180,7 +210,11 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
         if (merchantish) {
             when (o.status) {
                 St.PENDING -> {
-                    ActionButton("مراجعة وتأكيد الأسعار والكميات", pad) { editing = true }
+                    // قبول بلمسة واحدة: نفس المنتجات والأسعار التي رآها الزبون، فيبدأ التجهيز بلا موافقة ثانية
+                    ActionButton("قبول الطلب وبدء التجهيز", pad) {
+                        Api.proposeOrder(o.id, o.shownLines.map { Triple(it.productId, it.qty.toInt(), it.unitPrice) }, null)
+                    }
+                    ActionButton("تعديل الكميات أو الأسعار", pad, tonal = true) { editing = true }
                     ActionButton("رفض الطلب", pad, tonal = true) { dialog = "reject" }
                 }
                 St.AWAITING -> Text("بانتظار موافقة الزبون على الإجمالي.", modifier = Modifier.padding(16.dp))
@@ -225,7 +259,7 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
 }
 
 // ---------- محرر مراجعة التاجر ----------
-private data class EditLine(val productId: String, val name: String, val qty: Int, val price: String)
+private data class EditLine(val productId: String, val name: String, val qty: Int, val price: String, val origQty: Int = qty)
 
 @Composable
 private fun ReviewEditor(o: Order, onClose: () -> Unit) {
@@ -241,17 +275,33 @@ private fun ReviewEditor(o: Order, onClose: () -> Unit) {
     val active = lines.filter { it.qty > 0 }
     val pricesOk = active.all { it.price.trim().toLongOrNull()?.let { p -> p >= 0 } == true }
     val itemsTotal = active.sumOf { it.qty * (it.price.trim().toLongOrNull() ?: 0L) }
+    val firstReview = o.status == St.PENDING
+    // نفس المنتجات والكميات وبأسعار مساوية أو أقل: يُقبل مباشرة بلا موافقة الزبون (يطابق قاعدة الخادم)
+    val autoOk = firstReview && pricesOk && active.size == o.requestedItems.size && active.all { a ->
+        o.requestedItems.any { r -> r.productId == a.productId && r.qty.toInt() == a.qty && (a.price.trim().toLongOrNull() ?: Long.MAX_VALUE) <= r.unitPrice }
+    }
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Section("راجع التوفر والأسعار والكميات") {
-            Text("اجعل الكمية 0 لحذف منتج غير متوفر. أي تغيير يُرسل للزبون ليوافق عليه.", color = Mq.Muted)
+            Text(
+                if (firstReview) "عدّل الكمية أو السعر، أو اضغط «غير متوفر». خفض السعر وحده يُقبل مباشرة، وأي تغيير آخر يُرسل للزبون ليوافق."
+                else "عدّل الكمية أو السعر، أو اضغط «غير متوفر». أي تغيير هنا يُرسل للزبون ليوافق عليه.",
+                color = Mq.Muted,
+            )
             lines.forEachIndexed { i, l ->
                 Column(Modifier.padding(vertical = 8.dp)) {
-                    Text(l.name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(l.name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        if (l.qty == 0) Text("غير متوفر", color = Mq.Red)
+                        else Text(money(l.qty * (l.price.trim().toLongOrNull() ?: 0L)), color = Mq.Muted)
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Stepper(l.qty, { lines[i] = l.copy(qty = it) }, min = 0, max = 999)
                         Field("السعر", l.price, { lines[i] = l.copy(price = it.filter { c -> c.isDigit() }) },
                             Modifier.weight(1f).padding(start = 12.dp), keyboard = KeyboardType.Number)
+                    }
+                    TextButton(onClick = { lines[i] = if (l.qty == 0) l.copy(qty = maxOf(1, l.origQty)) else l.copy(qty = 0) }) {
+                        Text(if (l.qty == 0) "إعادة المنتج" else "غير متوفر", color = if (l.qty == 0) Mq.Muted else Mq.Red)
                     }
                 }
             }
@@ -260,7 +310,7 @@ private fun ReviewEditor(o: Order, onClose: () -> Unit) {
                 LoadableView(products) { list ->
                     list.filter { p -> p.isAvailable && lines.none { it.productId == p.id } }.forEach { p: Product ->
                         ActionButton("${p.name} — ${money(p.price)}", Modifier.fillMaxWidth().padding(top = 4.dp), tonal = true) {
-                            lines.add(EditLine(p.id, p.name, 1, p.price.toString()))
+                            lines.add(EditLine(p.id, p.name, 1, p.price.toString(), origQty = 1))
                             picking = false
                         }
                     }
@@ -274,7 +324,12 @@ private fun ReviewEditor(o: Order, onClose: () -> Unit) {
             InfoRow("المبلغ النهائي", money(itemsTotal + o.deliveryFee), bold = true)
         }
         val pad = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-        ActionButton("إرسال للزبون للموافقة", pad, enabled = active.isNotEmpty() && pricesOk) {
+        if (firstReview) Text(
+            if (autoOk) "لن يحتاج الزبون لموافقة: لا تغيير يضره، وسيبدأ التجهيز فورًا."
+            else "هذا التغيير يحتاج موافقة الزبون (منتج محذوف أو مضاف، أو كمية مختلفة، أو سعر أعلى).",
+            color = Mq.Muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        ActionButton(if (autoOk) "قبول وبدء التجهيز" else "إرسال للزبون للموافقة", pad, enabled = active.isNotEmpty() && pricesOk) {
             if (active.isEmpty()) throw ApiException("أبقِ منتجًا واحدًا على الأقل، أو ارفض الطلب.")
             Api.proposeOrder(o.id, active.map { Triple(it.productId, it.qty, it.price.trim().toLong()) }, note.trim().ifBlank { null })
             onClose()

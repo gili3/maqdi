@@ -112,6 +112,12 @@ export function phone(v: unknown): string {
   return s;
 }
 
+/** رقم اختياري: الفارغ يعني بلا رقم، وغير الفارغ يجب أن يكون صحيحًا */
+export function optPhone(v: unknown): string {
+  if (v === undefined || v === null || (typeof v === "string" && v.trim() === "")) return "";
+  return phone(v);
+}
+
 export function email(v: unknown): string {
   const s = str(v, "email", 5, 200).toLowerCase();
   if (!/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(s)) throw bad("email");

@@ -197,7 +197,7 @@ object Api {
         call("adminUpdateSettings", mapOf(
             "deliveryFee" to s.deliveryFee, "merchantReviewMinutes" to s.merchantReviewMinutes,
             "customerApprovalMinutes" to s.customerApprovalMinutes, "ordersEnabled" to s.ordersEnabled,
-            "maxOpenOrders" to s.maxOpenOrders,
+            "maxOpenOrders" to s.maxOpenOrders, "customerCancelGraceMinutes" to s.customerCancelGraceMinutes,
         ))
     }
 
@@ -229,7 +229,10 @@ object Api {
     }
 
     /** الأرقام null = تعذّر حسابها (مثل فهرس غير جاهز)؛ partial = بعض الأجزاء ناقصة */
-    data class Dashboard(val byStatus: Map<String, Long>, val deliveryRevenueToday: Long?, val cashToday: Long?, val partial: Boolean)
+    data class Dashboard(
+        val byStatus: Map<String, Long>, val deliveryRevenueToday: Long?, val cashToday: Long?, val partial: Boolean,
+        val deliveredToday: Long? = null, val storePayablesToday: List<Pair<String, Long>> = emptyList(),
+    )
 
     suspend fun adminDashboard(): Dashboard {
         val r = call("adminDashboard", timeoutSec = 30)
@@ -240,6 +243,12 @@ object Api {
             deliveryRevenueToday = (r["deliveryRevenueToday"] as? Number)?.toLong(),
             cashToday = (r["cashToday"] as? Number)?.toLong(),
             partial = r["partial"] as? Boolean ?: false,
+            deliveredToday = (r["deliveredToday"] as? Number)?.toLong(),
+            storePayablesToday = ((r["storePayablesToday"] as? List<*>) ?: emptyList<Any?>()).mapNotNull { e ->
+                val mm = e as? Map<*, *> ?: return@mapNotNull null
+                val id = mm["storeId"] as? String ?: return@mapNotNull null
+                id to ((mm["amount"] as? Number)?.toLong() ?: 0L)
+            },
         )
     }
 

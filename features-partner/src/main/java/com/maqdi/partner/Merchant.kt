@@ -73,6 +73,8 @@ fun ProductsManager(storeId: String, onBack: (() -> Unit)?) {
     var editing by remember { mutableStateOf<Product?>(null) }
     var creating by remember { mutableStateOf(false) }
     val products = rememberLoadable(storeId) { Repo.products(storeId) }
+    val quickScope = rememberCoroutineScope()
+    val quickCtx = LocalContext.current
 
     if (editing != null || creating) {
         ProductEditor(storeId, editing, onClose = { editing = null; creating = false })
@@ -103,6 +105,21 @@ fun ProductsManager(storeId: String, onBack: (() -> Unit)?) {
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                 }
+                                // مفتاح سريع: متوفر / نفد، بدون فتح شاشة التعديل
+                                Switch(
+                                    checked = p.isAvailable,
+                                    onCheckedChange = { v ->
+                                        quickScope.launch {
+                                            try {
+                                                Api.upsertProduct(p.id, storeId, p.name, p.description, p.category, p.price, p.stockQty, v, p.imagePath)
+                                            } catch (e: CancellationException) {
+                                                throw e
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(quickCtx, "تعذّر التحديث، أعد المحاولة.", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                )
                             }
                         }
                     }

@@ -8,17 +8,36 @@ export interface GuardOrder {
   revision?: number;
   approvedSnapshot?: { revision?: number } | null;
   courierUid?: string | null;
+  preparingAtMs?: number | null; // لحظة بدء التجهيز (مللي ثانية)
 }
+
+export interface GuardContext { nowMs: number; cancelGraceMs: number }
 
 export type GuardResult =
   | { kind: "apply" }
   | { kind: "already_applied" }
   | { kind: "reject"; code: string; httpCode: "failed-precondition" | "permission-denied" };
 
+export interface SimpleLine { productId: string; qty: number; unitPrice: number }
+
+/** هل مراجعة التاجر تطابق ما طلبه الزبون تمامًا؟ (نفس المنتجات والكميات والأسعار) */
+export function isUnchangedReview(requested: SimpleLine[] | undefined | null, reviewed: SimpleLine[]): boolean {
+  if (!Array.isArray(requested) || requested.length === 0 || requested.length !== reviewed.length) return false;
+  return reviewed.every((l) =>
+    requested.some((r) => r.productId === l.productId && r.qty === l.qty && r.unitPrice === l.unitPrice));
+}
+
+/** قبول مباشر: نفس المنتجات ونفس الكميات تمامًا، وكل سعر يساوي ما رآه الزبون أو أقل منه (لا يضر الزبون أبدًا) */
+export function isNoWorseReview(requested: SimpleLine[] | undefined | null, reviewed: SimpleLine[]): boolean {
+  if (!Array.isArray(requested) || requested.length === 0 || requested.length !== reviewed.length) return false;
+  return reviewed.every((l) =>
+    requested.some((r) => r.productId === l.productId && r.qty === l.qty && l.unitPrice <= r.unitPrice));
+}
+
 const NEEDS_APPROVAL: Status[] = ["preparing", "ready_for_pickup", "delivered"];
 
 export function evaluateStatusChange(
-  role: ActorRole, uid: string, o: GuardOrder, to: Status
+  role: ActorRole, uid: string, o: GuardOrder, to: Status, ctx?: GuardContext
 ): GuardResult {
   // الضغط المزدوج أو إعادة المحاولة: لا أثر ثانٍ
   if (o.status === to) {
@@ -29,6 +48,12 @@ export function evaluateStatusChange(
   }
   if (!canTransition(role, o.status, to))
     return { kind: "reject", code: `transition_not_allowed:${o.status}->${to}`, httpCode: "failed-precondition" };
+  // إلغاء الزبون أثناء التجهيز: فقط خلال المهلة بعد بدء التجهيز
+  if (role === "customer" && o.status === "preparing" && to === "cancelled") {
+    const start = o.preparingAtMs;
+    const ok = !!ctx && ctx.cancelGraceMs > 0 && typeof start === "number" && ctx.nowMs - start <= ctx.cancelGraceMs;
+    if (!ok) return { kind: "reject", code: "cancel_window_closed", httpCode: "failed-precondition" };
+  }
   if (role === "courier" && o.status === "out_for_delivery" && o.courierUid !== uid)
     return { kind: "reject", code: "not_your_delivery", httpCode: "permission-denied" };
   if (NEEDS_APPROVAL.includes(to)) {

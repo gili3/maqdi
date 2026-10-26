@@ -5,19 +5,23 @@ service firebase.storage {
     function profile() {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
+    function hasPerm(p) {
+      return profile().get('permissions', null) == null || p in profile().permissions;
+    }
+    // نفس منطق الخادم (catalog.ts): التاجر يحتاج «products» والأدمن «stores»
     function canManage(storeId) {
       return request.auth != null
         && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
         && profile().status == 'active'
-        && (profile().role == 'admin'
-            || (profile().role == 'merchant' && profile().storeId == storeId));
+        && ((profile().role == 'admin' && hasPerm('stores'))
+            || (profile().role == 'merchant' && profile().storeId == storeId && hasPerm('products')));
     }
     function canManageStores() {
       return request.auth != null
         && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
         && profile().status == 'active'
         && profile().role == 'admin'
-        && (profile().get('permissions', null) == null || 'stores' in profile().permissions);
+        && hasPerm('stores');
     }
     function smallImage() {
       return request.resource.size < 1024 * 1024

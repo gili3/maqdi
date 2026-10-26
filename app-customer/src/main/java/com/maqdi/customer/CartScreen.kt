@@ -70,7 +70,7 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
                                 Text(money(l.product.price * l.qty), color = Mq.Muted)
                             }
                             Stepper(l.qty, { Cart.set(l.product, Cart.storeName, it) }, min = 0,
-                                max = minOf(99L, l.product.stockQty ?: 99L).toInt())
+                                max = minOf(99L, 99L).toInt())
                         }
                     }
                 }

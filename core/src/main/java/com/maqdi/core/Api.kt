@@ -51,7 +51,7 @@ private val errors = mapOf(
     "cannot_revoke_higher" to "هذا الأدمن يملك صلاحيات أكثر منك، فلا يمكنك سحبها منه.",
     "already_admin" to "هذا المستخدم أدمن بالفعل. عدّل صلاحياته من «تخصيص الصلاحيات».",
     "not_admin" to "هذا المستخدم ليس أدمن.",
-    "user_is_admin" to "هذا المستخدم أدمن. لا يُغيَّر دوره بالدعوة؛ اسحب صلاحية الأدمن منه أولًا.",
+    "user_is_admin" to "هذا المستخدم أدمن. لا يُغيَّر دوره من هنا؛ اسحب صلاحية الأدمن منه أولًا.",
     "invalid_permissions" to "قائمة الصلاحيات غير صحيحة.",
     "invalid_storeId" to "اختر المتجر الذي يتبع له التاجر.",
     "invalid_email" to "البريد الإلكتروني غير صحيح.",
@@ -164,16 +164,16 @@ object Api {
     }
 
     /**
-     * إنشاء/دعوة تاجر أو موصّل. الأدمن لا يُمنح من هنا (انظر adminGrantAdmin).
-     * customizePermissions=false: لا يُرسَل الحقل (السلوك القديم). true: permissions=null يعني كل صلاحيات الدور.
+     * تعيين دور تاجر أو موصّل لمستخدم موجود. الأدمن لا يُمنح من هنا (انظر adminGrantAdmin).
+     * customizePermissions=false: لا يُرسَل الحقل. true: permissions=null يعني كل صلاحيات الدور.
      */
-    suspend fun adminInvite(
-        email: String, role: String, storeId: String?,
+    suspend fun adminSetRole(
+        uid: String, role: String, storeId: String?,
         permissions: List<String>? = null, customizePermissions: Boolean = false,
     ) {
-        val m = mutableMapOf<String, Any?>("email" to email, "role" to role, "storeId" to storeId)
+        val m = mutableMapOf<String, Any?>("uid" to uid, "role" to role, "storeId" to storeId)
         if (customizePermissions) m["permissions"] = permissions
-        call("adminInviteUser", m)
+        call("adminSetUserRole", m)
     }
 
     /** منح صلاحية أدمن لمستخدم موجود بقائمة صلاحيات صريحة (لا تتجاوز صلاحيات المانح) */

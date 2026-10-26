@@ -4,7 +4,7 @@ import { allPermissions, effectivePermissions, isSubset, validatePermissionList 
 import { callable, db, email, int, bool, obj, oneOf, optStr, str, docId, loadActor, writeAudit } from "./util";
 
 // تُستدعى بعد أول تسجيل دخول بـ Google لإنشاء الملف الشخصي.
-// الدور يُحدَّد من الخادم فقط: دعوة من المدير أو زبون افتراضيًا.
+// الدور يُحدَّد من الخادم فقط: كل حساب جديد زبون؛ يرفعه المدير لاحقًا من شاشة المستخدمين.
 export const ensureProfile = callable(async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "login_required");
   const token = req.auth.token as Record<string, unknown>;
@@ -15,34 +15,22 @@ export const ensureProfile = callable(async (req) => {
 
   return db.runTransaction(async (tx) => {
     const uref = db.doc(`users/${req.auth!.uid}`);
-    const inviteRef = db.doc(`invites/${mail}`);
-    const [u, inv] = await tx.getAll(uref, inviteRef);
+    const u = await tx.get(uref);
     if (u.exists) return { role: u.get("role"), status: u.get("status"), storeId: u.get("storeId") ?? null };
-
-    let role = "customer";
-    let storeId: string | null = null;
-    let permissions: string[] | null = null;
-    if (inv.exists && inv.get("used") !== true) {
-      role = inv.get("role");
-      storeId = inv.get("storeId") ?? null;
-      // صلاحيات حُدّدت وقت الإنشاء؛ تُتحقق مرة أخرى ضد كتالوج الدور (قيمة غير صالحة = الافتراضي)
-      permissions = validatePermissionList(role, inv.get("permissions") ?? null);
-    }
     const now = Timestamp.now();
-    tx.create(uref, { email: mail, name, phone: null, role, storeId, permissions, status: "active", isTestAccount: false, savedAddress: null, fcmTokens: [], createdAt: now, updatedAt: now });
-    if (inv.exists && role !== "customer") tx.update(inviteRef, { used: true, usedBy: req.auth!.uid, usedAt: now });
-    return { role, status: "active", storeId };
+    tx.create(uref, { email: mail, name, phone: null, role: "customer", storeId: null, permissions: null, status: "active", isTestAccount: false, savedAddress: null, fcmTokens: [], createdAt: now, updatedAt: now });
+    return { role: "customer", status: "active", storeId: null };
   });
 });
 
 // ---------- إدارة المستخدمين (المدير) ----------
-// إنشاء مستخدم تاجر أو موصّل (بدعوة تُفعَّل عند أول دخول، أو تطبيق فوري إن كان الحساب موجودًا).
+// تعيين دور تاجر أو موصّل لمستخدم موجود (سجّل دخوله مرة على الأقل). لا دعوات بالبريد.
 // صلاحية الأدمن لا تُمنح من هنا: انظر adminGrantAdmin.
-// permissions: غير مُرسَل = السلوك القديم (يُحفظ للحساب القائم بنفس الدور، ويُعاد للافتراضي عند تغيير الدور)،
+// permissions: غير مُرسَل = يُحفظ للحساب بنفس الدور ويُعاد للافتراضي عند تغيير الدور،
 //              null = كل صلاحيات الدور، قائمة = صلاحيات محدّدة.
-export const adminInviteUser = callable(async (req) => {
+export const adminSetUserRole = callable(async (req) => {
   const d = obj(req.data);
-  const mail = email(d.email);
+  const uid = str(d.uid, "uid", 5, 128);
   const role = oneOf(d.role, "role", ["merchant", "courier"] as const);
   const storeId = role === "merchant" ? docId(d.storeId, "storeId") : null;
   const hasPerms = d.permissions !== undefined;
@@ -54,32 +42,23 @@ export const adminInviteUser = callable(async (req) => {
 
   return db.runTransaction(async (tx) => {
     const actor = await loadActor(req, ["admin"], tx, { admin: "users" });
-    if (hasPerms && perms !== null) {
-      // تحديد صلاحيات مخصّصة يتطلب صلاحية «permissions» أيضًا
-      if (!actor.permissions.includes("permissions")) throw new HttpsError("permission-denied", "permission_denied");
-    }
+    if (hasPerms && !actor.permissions.includes("permissions")) throw new HttpsError("permission-denied", "permission_denied");
     if (storeId) {
       const s = await tx.get(db.doc(`stores/${storeId}`));
       if (!s.exists) throw new HttpsError("not-found", "store_not_found");
     }
-    const existing = await tx.get(db.collection("users").where("email", "==", mail).limit(1));
-    const now = Timestamp.now();
-    if (!existing.empty) {
-      const doc = existing.docs[0];
-      const oldRole = String(doc.get("role"));
-      // لا يُخفَّض أدمن عبر الدعوة: يُسحب منه الأدمن من شاشة المستخدمين عمدًا
-      if (oldRole === "admin") throw new HttpsError("failed-precondition", "user_is_admin");
-      const patch: Record<string, unknown> = { role, storeId, updatedAt: now };
-      if (hasPerms) patch.permissions = perms;
-      else if (oldRole !== role) patch.permissions = null;
-      tx.update(doc.ref, patch);
-    } else {
-      const inv: Record<string, unknown> = { role, storeId, used: false, createdBy: actor.uid, createdAt: now };
-      if (hasPerms) inv.permissions = perms;
-      tx.set(db.doc(`invites/${mail}`), inv);
-    }
-    writeAudit(tx, actor, "invite_user", "user", mail, { role, storeId, permissions: hasPerms ? perms : "unchanged", existingUser: !existing.empty });
-    return { ok: true, appliedToExistingUser: !existing.empty };
+    const ref = db.doc(`users/${uid}`);
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "user_not_found");
+    const oldRole = String(snap.get("role"));
+    // لا يُخفَّض أدمن هنا: يُسحب منه الأدمن من شاشة المستخدمين عمدًا
+    if (oldRole === "admin") throw new HttpsError("failed-precondition", "user_is_admin");
+    const patch: Record<string, unknown> = { role, storeId, updatedAt: Timestamp.now() };
+    if (hasPerms) patch.permissions = perms;
+    else if (oldRole !== role) patch.permissions = null;
+    tx.update(ref, patch);
+    writeAudit(tx, actor, "set_user_role", "user", uid, { oldRole, role, storeId, permissions: hasPerms ? perms : "unchanged" });
+    return { ok: true };
   });
 });
 

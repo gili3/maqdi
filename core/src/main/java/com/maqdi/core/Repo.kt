@@ -125,8 +125,6 @@ object Repo {
         db.collection("orders").whereEqualTo("courierUid", uid).orderBy("createdAt", desc).limit(100).listFlow { it.toOrder() }
 
     fun users() = db.collection("users").limit(200).listFlow { it.toUserRow() }
-    /** الدعوات غير المستعملة (تتطلب صلاحية «users»). التصفية على حقل واحد فلا يلزم فهرس. */
-    fun pendingInvites() = db.collection("invites").whereEqualTo("used", false).limit(100).listFlow { it.toInvite() }
     fun audit() = db.collection("audit_logs").orderBy("at", desc).limit(100).listFlow { it.toAudit() }
     fun expenses() = db.collection("expenses").orderBy("createdAt", desc).limit(50).listFlow { it.toExpense() }
 

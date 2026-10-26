@@ -184,7 +184,7 @@ fun ProductsScreen(storeId: String, onBack: () -> Unit, onOpenCart: () -> Unit) 
 
 @Composable
 private fun ProductRow(p: Product, qty: Int, canOrder: Boolean, onQty: (Int) -> Unit) {
-    val maxQty = minOf(99L, p.stockQty ?: 99L).toInt()
+    val maxQty = minOf(99L, 99L).toInt()
     MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             StorageImage(p.imagePath, Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)))

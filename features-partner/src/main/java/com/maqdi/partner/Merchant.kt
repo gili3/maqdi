@@ -100,7 +100,7 @@ fun ProductsManager(storeId: String, onBack: (() -> Unit)?) {
                                     Text(p.name, style = MaterialTheme.typography.titleMedium)
                                     Text(money(p.price), color = MaterialTheme.colorScheme.primary)
                                     Text(
-                                        (if (p.isAvailable) "متوفر" else "غير متوفر") + (p.stockQty?.let { " • الكمية: $it" } ?: ""),
+                                        if (p.isAvailable) "متوفر" else "غير متوفر",
                                         color = if (p.isAvailable) Mq.Muted else Mq.Red,
                                         style = MaterialTheme.typography.bodySmall,
                                     )
@@ -111,7 +111,7 @@ fun ProductsManager(storeId: String, onBack: (() -> Unit)?) {
                                     onCheckedChange = { v ->
                                         quickScope.launch {
                                             try {
-                                                Api.upsertProduct(p.id, storeId, p.name, p.description, p.category, p.price, p.stockQty, v, p.imagePath)
+                                                Api.upsertProduct(p.id, storeId, p.name, p.description, p.category, p.price, null, v, p.imagePath)
                                             } catch (e: CancellationException) {
                                                 throw e
                                             } catch (e: Exception) {
@@ -135,7 +135,6 @@ private fun ProductEditor(storeId: String, p: Product?, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(p?.name ?: "") }
     var price by remember { mutableStateOf(p?.price?.toString() ?: "") }
-    var stock by remember { mutableStateOf(p?.stockQty?.toString() ?: "") }
     var desc by remember { mutableStateOf(p?.description ?: "") }
     var category by remember { mutableStateOf(p?.category ?: "") }
     var available by remember { mutableStateOf(p?.isAvailable ?: true) }
@@ -164,8 +163,7 @@ private fun ProductEditor(storeId: String, p: Product?, onClose: () -> Unit) {
     }
 
     val priceVal = price.trim().toLongOrNull()
-    val stockVal = if (stock.isBlank()) null else stock.trim().toLongOrNull()
-    val valid = name.trim().length >= 2 && priceVal != null && priceVal >= 0 && (stock.isBlank() || (stockVal != null && stockVal >= 0))
+    val valid = name.trim().length >= 2 && priceVal != null && priceVal >= 0
 
     Screen(if (p == null) "منتج جديد" else "تعديل المنتج", onBack = onClose) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -180,8 +178,6 @@ private fun ProductEditor(storeId: String, p: Product?, onClose: () -> Unit) {
             Section("البيانات") {
                 Field("اسم المنتج", name, { name = it })
                 Field("السعر (جنيه)", price, { price = it.filter { c -> c.isDigit() } }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Number)
-                Field("الكمية المتوفرة (اتركها فارغة إن لم تُحصِها)", stock, { stock = it.filter { c -> c.isDigit() } },
-                    Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Number)
                 Field("التصنيف (مثل: مشروبات، ألبان، أدوية عامة)", category, { category = it }, Modifier.fillMaxWidth().padding(top = 8.dp))
                 Field("وصف (اختياري)", desc, { desc = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = false)
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -190,7 +186,7 @@ private fun ProductEditor(storeId: String, p: Product?, onClose: () -> Unit) {
                 }
             }
             ActionButton("حفظ", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), enabled = valid && !uploading) {
-                Api.upsertProduct(p?.id, storeId, name.trim(), desc.trim().ifBlank { null }, category.trim().ifBlank { null }, priceVal ?: 0L, stockVal, available, imagePath)
+                Api.upsertProduct(p?.id, storeId, name.trim(), desc.trim().ifBlank { null }, category.trim().ifBlank { null }, priceVal ?: 0L, null, available, imagePath)
                 onClose()
             }
         }

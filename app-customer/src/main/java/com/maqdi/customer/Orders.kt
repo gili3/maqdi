@@ -166,7 +166,7 @@ private fun OrderBody(o: Order, onReorder: () -> Unit) {
                 var added = 0
                 o.shownLines.forEach { l ->
                     val p = products.firstOrNull { it.id == l.productId && it.isAvailable } ?: return@forEach
-                    val qty = minOf(l.qty.toInt(), (p.stockQty ?: 99L).toInt(), 99)
+                    val qty = minOf(l.qty.toInt(), (99L).toInt(), 99)
                     if (qty > 0) { Cart.set(p, o.storeName, qty); added++ }
                 }
                 if (added == 0) throw com.maqdi.core.ApiException("منتجات هذا الطلب غير متوفرة الآن.")

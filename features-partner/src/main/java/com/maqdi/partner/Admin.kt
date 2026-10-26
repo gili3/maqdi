@@ -379,8 +379,6 @@ private fun StoreEditor(s: Store?, onClose: () -> Unit, onProducts: (String) -> 
     var category by remember { mutableStateOf(s?.category ?: options.firstOrNull()?.first ?: "grocery") }
     var active by remember { mutableStateOf((s?.status ?: "active") == "active") }
     var open by remember { mutableStateOf(s?.isOpen ?: true) }
-    var email by remember { mutableStateOf("") }
-    var invited by remember { mutableStateOf(false) }
     var pendingImage by remember { mutableStateOf<android.net.Uri?>(null) }
     // بعد أول حفظ ناجح لمتجر جديد نتذكر معرّفه حتى لا يتكرر الإنشاء عند إعادة المحاولة
     var createdId by remember { mutableStateOf<String?>(null) }
@@ -427,15 +425,6 @@ private fun StoreEditor(s: Store?, onClose: () -> Unit, onProducts: (String) -> 
             }
             if (storeId != null) {
                 ActionButton("منتجات هذا المتجر", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), tonal = true) { onProducts(storeId) }
-                Section("دعوة تاجر لهذا المتجر") {
-                    Text("اكتب بريد Gmail الخاص بالتاجر. عند أول دخول له بهذا البريد يصبح تاجرًا لهذا المتجر.", color = Mq.Muted)
-                    Field("بريد التاجر", email, { email = it; invited = false }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Email)
-                    ActionButton("إرسال الدعوة", Modifier.fillMaxWidth().padding(top = 8.dp), enabled = email.contains("@")) {
-                        Api.adminInvite(email.trim().lowercase(), "merchant", storeId)
-                        invited = true
-                    }
-                    if (invited) Text("تم تسجيل الدعوة.", color = Mq.Green)
-                }
             }
         }
     }
@@ -631,8 +620,8 @@ private fun RoleDialog(u: UserRow, actor: Profile, stores: List<Store>, onDismis
                             } else {
                                 if (u.role == "admin") Api.adminRevokeAdmin(u.uid)
                                 // قائمة صريحة (لا null) كي لا يرث الحساب صلاحيات تُضاف مستقبلًا؛ تحديدها يتطلب صلاحية «permissions»
-                                Api.adminInvite(
-                                    u.email.trim().lowercase(), role, if (role == "merchant") storeId else null,
+                                Api.adminSetRole(
+                                    u.uid, role, if (role == "merchant") storeId else null,
                                     permissions = if (canPerms) Permissions.presets[role] else null, customizePermissions = canPerms,
                                 )
                             }

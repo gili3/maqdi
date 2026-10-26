@@ -152,10 +152,15 @@ private fun OrderBody(o: Order, onReorder: () -> Unit) {
         }
 
         Section("التوصيل") {
-            if (o.customerPhone.isNotBlank()) InfoRow("الهاتف", o.customerPhone)
             InfoRow("العنوان", o.address)
             o.locationNote?.let { InfoRow("وصف الموقع", it) }
             o.courierName?.let { InfoRow("الموصّل", it) }
+            o.courierPhone?.takeIf { it.isNotBlank() && o.status == St.OUT }?.let { phone ->
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                ActionButton("اتصال بالموصّل", tonal = true) {
+                    ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.parse("tel:" + phone)))
+                }
+            }
         }
 
         if (o.status in St.terminal) {

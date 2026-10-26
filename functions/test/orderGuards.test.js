@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const { evaluateStatusChange } = require("../lib/orderGuards");
+const { evaluateStatusChange, courierCommissionFor } = require("../lib/orderGuards");
 
 const approved = (o = {}) => ({ status: "confirmed", revision: 1, approvedSnapshot: { revision: 1 }, courierUid: null, ...o });
 const rejected = (r, code) => { assert.equal(r.kind, "reject"); assert.equal(r.code, code); };
@@ -83,4 +83,13 @@ test("إلغاء الزبون أثناء التجهيز: داخل المهلة �
   assert.equal(evalChange("customer", "c1", o, "cancelled").kind, "reject"); // بلا سياق
   assert.equal(evalChange("customer", "c1", { ...o, status: "ready_for_pickup" }, "cancelled", ctx(1_000_001)).kind, "reject");
   assert.equal(evalChange("merchant", "m1", o, "cancelled", ctx(9_999_999)).kind, "apply"); // التاجر غير مقيّد
+});
+
+test("عمولة المندوب: ثابتة، لا تتجاوز رسم التوصيل، ولا تقل عن صفر", () => {
+  assert.equal(courierCommissionFor(4000, 500), 500);
+  assert.equal(courierCommissionFor(4000, 9000), 4000);
+  assert.equal(courierCommissionFor(4000, -5), 0);
+  assert.equal(courierCommissionFor(4000, undefined), 0);
+  assert.equal(courierCommissionFor(0, 500), 0);
+  assert.equal(courierCommissionFor(4000, "500"), 0);
 });

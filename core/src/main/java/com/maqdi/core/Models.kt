@@ -41,6 +41,7 @@ data class Order(
     val settlementStatus: String, val payableAmount: Long, val settledAmount: Long,
     val courierName: String?, val courierUid: String?, val isTest: Boolean,
     val preparingAt: Long? = null,
+    val courierPhone: String? = null,
 ) {
     /** الأسطر المعروضة: اقتراح التاجر إن وُجد وإلا ما طلبه الزبون */
     val shownLines: List<Line> get() = proposal?.items ?: requestedItems
@@ -50,6 +51,7 @@ data class Settings(
     val deliveryFee: Long = 4000, val merchantReviewMinutes: Long = 15,
     val customerApprovalMinutes: Long = 30, val ordersEnabled: Boolean = true,
     val maxOpenOrders: Long = 3, val customerCancelGraceMinutes: Long = 3,
+    val courierCommission: Long = 0, val courierPickupMinutes: Long = 10,
 )
 
 data class AppNotification(
@@ -146,6 +148,7 @@ fun DocumentSnapshot.toOrder(): Order {
         payableAmount = lng("payableAmount"), settledAmount = lng("settledAmount"),
         courierName = getString("courierName"), courierUid = getString("courierUid"), isTest = getBoolean("isTest") ?: false,
         preparingAt = time("preparingAt"),
+        courierPhone = getString("courierPhone"),
     )
 }
 
@@ -153,6 +156,7 @@ fun DocumentSnapshot.toSettings() = Settings(
     deliveryFee = getLong("deliveryFee") ?: 4000, merchantReviewMinutes = getLong("merchantReviewMinutes") ?: 15,
     customerApprovalMinutes = getLong("customerApprovalMinutes") ?: 30, ordersEnabled = getBoolean("ordersEnabled") ?: true,
     maxOpenOrders = getLong("maxOpenOrders") ?: 3, customerCancelGraceMinutes = getLong("customerCancelGraceMinutes") ?: 3,
+    courierCommission = getLong("courierCommission") ?: 0, courierPickupMinutes = getLong("courierPickupMinutes") ?: 10,
 )
 
 fun DocumentSnapshot.toNotification() = AppNotification(

@@ -6,7 +6,7 @@ import {
 import { LOCAL_OFFSET_MS, STATUSES } from "./config";
 import { AggregateField } from "firebase-admin/firestore";
 
-export type Ledger = "cash" | "store_payable" | "delivery_revenue";
+export type Ledger = "cash" | "store_payable" | "delivery_revenue" | "courier_commission";
 
 export interface EntryInput {
   orderId?: string | null;

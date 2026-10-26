@@ -137,6 +137,8 @@ export const adminUpdateSettings = callable(async (req) => {
     updatedAt: Timestamp.now(),
   };
   if (d.maxOpenOrders !== undefined) patch.maxOpenOrders = int(d.maxOpenOrders, "maxOpenOrders", 1, 20);
+  if (d.courierCommission !== undefined) patch.courierCommission = int(d.courierCommission, "courierCommission", 0, 1_000_000);
+  if (d.courierPickupMinutes !== undefined) patch.courierPickupMinutes = int(d.courierPickupMinutes, "courierPickupMinutes", 0, 240);
   if (d.customerCancelGraceMinutes !== undefined) patch.customerCancelGraceMinutes = int(d.customerCancelGraceMinutes, "customerCancelGraceMinutes", 0, 30);
   return db.runTransaction(async (tx) => {
     const actor = await loadActor(req, ["admin"], tx, { admin: "settings" });

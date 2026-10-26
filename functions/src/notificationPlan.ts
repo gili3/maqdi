@@ -12,7 +12,10 @@ export function planFor(after: Record<string, unknown>): Plan[] {
     case "confirmed":
       return [p("merchants", "تمت موافقة الزبون", "يمكنك بدء التجهيز.")];
     case "preparing":
-      return [p("customer", "طلبك قيد التجهيز", "بدأ المتجر تجهيزه.")];
+      return [
+        p("customer", "طلبك قيد التجهيز", "بدأ المتجر تجهيزه."),
+        p("couriers", "طلب قادم", "سيكون جاهزًا قريبًا."),
+      ];
     case "ready_for_pickup":
       return [
         p("couriers", "طلب جاهز للاستلام", "طلب جاهز في المتجر."),

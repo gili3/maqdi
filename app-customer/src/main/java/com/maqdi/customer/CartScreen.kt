@@ -85,7 +85,7 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
                 }
                 Section("بيانات التوصيل") {
                     Field("العنوان", address, { address = it }, Modifier.fillMaxWidth())
-                    Field("رقم الهاتف (اختياري)", phone, { phone = it }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Phone)
+                    Field("رقم الهاتف (اختياري، لا يظهر لأحد)", phone, { phone = it }, Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Phone)
                 }
                 ActionButton(
                     "إرسال الطلب",

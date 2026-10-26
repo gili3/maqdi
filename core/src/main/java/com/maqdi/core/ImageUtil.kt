@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageException
 import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
@@ -56,7 +57,7 @@ object ImageUtil {
         val bytes = compress(ctx, uri)
         val path = "products/$storeId/${UUID.randomUUID()}/main.jpg"
         val meta = StorageMetadata.Builder().setContentType("image/jpeg").build()
-        FirebaseStorage.getInstance().reference.child(path).putBytes(bytes, meta).await()
+        put(path, bytes, meta)
         return path
     }
 
@@ -65,7 +66,24 @@ object ImageUtil {
         val bytes = compress(ctx, uri)
         val path = "stores/$storeId/${UUID.randomUUID()}/main.jpg"
         val meta = StorageMetadata.Builder().setContentType("image/jpeg").build()
-        FirebaseStorage.getInstance().reference.child(path).putBytes(bytes, meta).await()
+        put(path, bytes, meta)
         return path
+    }
+
+    /** يرفع البايتات ويحوّل أخطاء التخزين إلى رسالة عربية تبيّن السبب الحقيقي بدل رسالة «الاتصال» العامة */
+    private suspend fun put(path: String, bytes: ByteArray, meta: StorageMetadata) {
+        try {
+            FirebaseStorage.getInstance().reference.child(path).putBytes(bytes, meta).await()
+        } catch (e: StorageException) {
+            val msg = when (e.errorCode) {
+                StorageException.ERROR_NOT_AUTHENTICATED -> "انتهت جلسة الدخول. سجّل الدخول من جديد."
+                StorageException.ERROR_NOT_AUTHORIZED -> "رفضت قواعد التخزين رفع الصورة. تأكد من نشر قواعد Storage ومن صلاحية الحساب."
+                StorageException.ERROR_BUCKET_NOT_FOUND -> "مساحة تخزين الصور غير مفعّلة في مشروع Firebase."
+                StorageException.ERROR_QUOTA_EXCEEDED -> "نفدت حصة التخزين."
+                StorageException.ERROR_RETRY_LIMIT_EXCEEDED -> "انقطع الاتصال أثناء الرفع. حاول مجددًا."
+                else -> "تعذّر رفع الصورة (رمز ${e.errorCode})."
+            }
+            throw ApiException(msg, "storage_${e.errorCode}")
+        }
     }
 }

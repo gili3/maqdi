@@ -53,7 +53,7 @@ export const onOrderChanged = onDocumentWritten({ document: "orders/{orderId}", 
           tokens,
           notification: { title: plan.title, body: plan.body },
           data: { orderId, status: String(after.status) },
-          android: { priority: "high" },
+          android: { priority: "high", notification: { channelId: "maqdi_orders" } },
         });
       }
     } catch (e) {

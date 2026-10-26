@@ -4,7 +4,7 @@ import { OPEN_STATUSES, Status } from "./config";
 import { addEntry, bumpBalance } from "./finance";
 import { canTransition } from "./stateMachine";
 import { permissionForStatusChange } from "./permissions";
-import { evaluateStatusChange, GuardOrder, isNoWorseReview } from "./orderGuards";
+import { courierCommissionFor, evaluateStatusChange, GuardOrder, isNoWorseReview } from "./orderGuards";
 import {
   Actor, arr, callable, db, docId, int, loadActor, obj, oneOf, optStr, optPhone, readSettings, str,
   submissionKey, writeAudit,
@@ -43,7 +43,7 @@ export const createOrder = callable(async (req) => {
     const pid = docId(it.productId, "productId");
     merged.set(pid, Math.min(99, (merged.get(pid) ?? 0) + int(it.qty, "qty", 1, 99)));
   }
-  const customerPhone = optPhone(d.phone);
+  optPhone(d.phone); // يُتحقق من صحته فقط ولا يُحفظ في الطلب: رقم الزبون خاص
   const address = str(d.address, "address", 3, 300);
   const locationNote = optStr(d.locationNote, "locationNote", 300);
 
@@ -86,7 +86,7 @@ export const createOrder = callable(async (req) => {
     tx.set(orderRef, {
       customerId: actor.uid,
       customerName: actor.name,
-      customerPhone,
+      customerPhone: null,
       storeId,
       storeName: storeSnap.get("name"),
       status: "pending_merchant",
@@ -299,9 +299,13 @@ export const changeOrderStatus = callable(async (req) => {
         Object.assign(patch, to === "preparing" ? { preparingAt: now, preparingBy: actor.uid } : { readyAt: now, readyBy: actor.uid });
         break;
       }
-      case "out_for_delivery":
-        Object.assign(patch, { pickedUpAt: now, courierUid: actor.uid, courierName: actor.name });
+      case "out_for_delivery": {
+        // رقم المندوب يظهر للزبون ليتصل به (رقم الزبون لا يظهر لأحد)
+        const cu = await tx.get(db.doc(`users/${actor.uid}`));
+        const courierPhone = (cu.get("phone") as string | null | undefined) ?? null;
+        Object.assign(patch, { pickedUpAt: now, courierUid: actor.uid, courierName: actor.name, courierPhone });
         break;
+      }
       case "delivered": {
         const a = o.approvedSnapshot;
         if (!a || a.revision !== o.revision) throw new HttpsError("failed-precondition", "total_not_approved");
@@ -315,6 +319,14 @@ export const changeOrderStatus = callable(async (req) => {
           balanceField: "payable", balanceDelta: itemsTotal, isTest: !!o.isTest,
         }, actor);
         addEntry(tx, `${orderId}__delivery_revenue`, { orderId, storeId: o.storeId, ledger: "delivery_revenue", type: "order_delivered", amount: deliveryRevenue, isTest: !!o.isTest }, actor);
+        // عمولة المنصة من المندوب (سجل مستقل لا يغيّر بقية القيود؛ بقيمة تحددها الإدارة)
+        const commission = courierCommissionFor(deliveryRevenue, settings.courierCommission);
+        if (commission > 0) {
+          addEntry(tx, `${orderId}__courier_commission`, {
+            orderId, storeId: o.storeId, ledger: "courier_commission", type: "order_delivered", amount: commission,
+            note: `courier:${o.courierUid ?? ""}`, isTest: !!o.isTest,
+          }, actor);
+        }
         bumpBalance(tx, o.storeId, "payable", itemsTotal);
         Object.assign(patch, {
           deliveredAt: now, deliveredBy: actor.uid, collectedAmount: collected,

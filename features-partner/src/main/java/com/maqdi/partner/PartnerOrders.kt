@@ -167,7 +167,6 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
                 StatusChip(o.status)
             }
             StatusSteps(o.status)
-            if (o.customerPhone.isNotBlank()) InfoRow("الهاتف", o.customerPhone)
             if (courierish) {
                 Text("العنوان", color = Mq.Muted, modifier = Modifier.padding(top = 4.dp))
                 Text(o.address, style = MaterialTheme.typography.titleMedium)
@@ -176,13 +175,6 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
             }
             o.locationNote?.let { InfoRow("وصف الموقع", it) }
             InfoRow("وقت الطلب", dateTime(o.createdAt))
-            if (courierish && o.customerPhone.isNotBlank() && (o.status == St.READY || o.status == St.OUT)) {
-                val ctx = LocalContext.current
-                Spacer(Modifier.height(8.dp))
-                ActionButton("اتصال بالزبون", tonal = true) {
-                    ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + o.customerPhone)))
-                }
-            }
             o.courierName?.let { InfoRow("الموصّل", it) }
             o.rejectReason?.let { Text("سبب الرفض: $it", color = Mq.Red) }
             o.cancelReason?.let { Text("سبب الإلغاء: $it", color = Mq.Red) }

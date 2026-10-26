@@ -69,6 +69,7 @@ test("خطة الإشعارات: من يُخطَر في كل حالة", () => {
   assert.deepEqual(to({ status: "pending_merchant" }), ["merchants"]);
   assert.deepEqual(to({ status: "awaiting_customer" }), ["customer"]);
   assert.deepEqual(to({ status: "confirmed" }), ["merchants"]);
+  assert.deepEqual(to({ status: "preparing" }), ["couriers", "customer"]);
   assert.deepEqual(to({ status: "ready_for_pickup" }), ["couriers", "customer"]);
   assert.deepEqual(to({ status: "delivered" }), ["customer", "merchants"]);
   assert.deepEqual(to({ status: "cancelled", cancelledByRole: "customer" }), ["merchants"]);

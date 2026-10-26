@@ -63,3 +63,9 @@ export function evaluateStatusChange(
   }
   return { kind: "apply" };
 }
+
+/** عمولة المنصة من المندوب: مبلغ ثابت تحدده الإدارة، لا تتجاوز رسم التوصيل المحصَّل ولا تقل عن صفر */
+export function courierCommissionFor(deliveryRevenue: number, setting: unknown): number {
+  const c = typeof setting === "number" && isFinite(setting) ? Math.floor(setting) : 0;
+  return Math.max(0, Math.min(c, Math.max(0, Math.floor(deliveryRevenue))));
+}

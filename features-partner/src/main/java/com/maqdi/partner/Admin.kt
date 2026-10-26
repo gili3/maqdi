@@ -664,19 +664,31 @@ private fun SettingsForm(s: Settings, onAudit: (() -> Unit)? = null) {
     var enabled by remember(s) { mutableStateOf(s.ordersEnabled) }
     var maxOpen by remember(s) { mutableStateOf(s.maxOpenOrders.toString()) }
     var grace by remember(s) { mutableStateOf(s.customerCancelGraceMinutes.toString()) }
+    var commission by remember(s) { mutableStateOf(s.courierCommission.toString()) }
+    var pickupMin by remember(s) { mutableStateOf(s.courierPickupMinutes.toString()) }
     var saved by remember { mutableStateOf(false) }
     val feeV = fee.toLongOrNull()
     val mV = merchantMin.toLongOrNull()
     val cV = customerMin.toLongOrNull()
     val oV = maxOpen.toLongOrNull()
     val gV = grace.toLongOrNull()
+    val comV = commission.toLongOrNull()
+    val pkV = pickupMin.toLongOrNull()
     val valid = feeV != null && feeV in 0..1_000_000 && mV != null && mV in 1..1440 && cV != null && cV in 1..1440 && oV != null && oV in 1..20 &&
-        gV != null && gV in 0..30
+        gV != null && gV in 0..30 && comV != null && comV in 0..1_000_000 && pkV != null && pkV in 0..240
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Section("رسوم التوصيل") {
             Field("رسوم التوصيل (جنيه)", fee, { fee = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
             Text("تسري على الطلبات الجديدة فقط. الطلبات الحالية تحتفظ برسومها.", color = Mq.Muted)
+        }
+        Section("عمولة المندوب") {
+            Field("عمولة المنصة على كل توصيل (جنيه)", commission, { commission = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
+            Text("تُسجَّل عند التسليم وتُحسب من رسم التوصيل، ولا تتجاوزه. 0 = بلا عمولة.", color = Mq.Muted)
+        }
+        Section("تنبيه الطلب الذي لم يستلمه مندوب") {
+            Field("بعد كم دقيقة من الجاهزية (0 = بلا تنبيه)", pickupMin, { pickupMin = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
+            Text("ينبّهك التطبيق مرة واحدة إن بقي طلب جاهز بلا مندوب أطول من هذه المدة.", color = Mq.Muted)
         }
         Section("المهل بالدقائق") {
             Field("مهلة مراجعة التاجر", merchantMin, { merchantMin = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
@@ -697,7 +709,7 @@ private fun SettingsForm(s: Settings, onAudit: (() -> Unit)? = null) {
             }
         }
         ActionButton("حفظ", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), enabled = valid) {
-            Api.adminUpdateSettings(Settings(feeV ?: 0, mV ?: 15, cV ?: 30, enabled, oV ?: 3, gV ?: 3))
+            Api.adminUpdateSettings(Settings(feeV ?: 0, mV ?: 15, cV ?: 30, enabled, oV ?: 3, gV ?: 3, comV ?: 0, pkV ?: 10))
             saved = true
         }
         if (saved) Text("تم الحفظ.", modifier = Modifier.padding(16.dp), color = Mq.Green)

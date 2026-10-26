@@ -34,6 +34,8 @@ export const DEFAULT_SETTINGS = {
   customerApprovalMinutes: 30,
   ordersEnabled: true,
   maxOpenOrders: 3, // أقصى عدد طلبات مفتوحة لكل زبون
+  courierCommission: 0, // عمولة المنصة من المندوب (جنيه) على كل توصيل؛ تحددها الإدارة من الإعدادات
+  courierPickupMinutes: 10, // بعد «جاهز للاستلام» وبلا مندوب: تنبيه الإدارة بعد هذه المدة (0 = بلا تنبيه)
   customerCancelGraceMinutes: 3, // مهلة إلغاء الزبون بعد أن يقبل التاجر ويبدأ التجهيز (0 = لا إلغاء)
 };
 

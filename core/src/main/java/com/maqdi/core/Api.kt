@@ -198,6 +198,7 @@ object Api {
             "deliveryFee" to s.deliveryFee, "merchantReviewMinutes" to s.merchantReviewMinutes,
             "customerApprovalMinutes" to s.customerApprovalMinutes, "ordersEnabled" to s.ordersEnabled,
             "maxOpenOrders" to s.maxOpenOrders, "customerCancelGraceMinutes" to s.customerCancelGraceMinutes,
+            "courierCommission" to s.courierCommission, "courierPickupMinutes" to s.courierPickupMinutes,
         ))
     }
 

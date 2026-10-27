@@ -37,7 +37,7 @@ fun CourierHistoryContent(profile: Profile, onOpen: (String) -> Unit) {
                     val delivered = list.filter { it.status == St.DELIVERED }
                     Section("ملخص آخر ${list.size} طلبًا") {
                         InfoRow("التوصيلات المنجزة", delivered.size.toString())
-                        InfoRow("المبالغ المحصَّلة", money(delivered.sumOf { it.total }), bold = true)
+                        InfoRow("المبالغ المحصَّلة نقدًا", money(delivered.sumOf { it.cashDue }), bold = true)
                         InfoRow("تعذّر التسليم", list.count { it.status == St.FAILED }.toString())
                     }
                     LazyColumn { items(list, key = { it.id }) { PartnerOrderRow(it, showStore = true, onOpen = onOpen) } }

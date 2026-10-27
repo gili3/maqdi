@@ -18,6 +18,7 @@ const USERS = {
   m1x: { role: "merchant", status: "active", storeId: "s1", name: "تاجر مقيّد", permissions: ["products"], fcmTokens: [] },
   granter: { role: "admin", status: "active", name: "مدير يمنح", permissions: ["grant_admin"], fcmTokens: [] },
   sus: { role: "customer", status: "suspended", name: "موقوف", fcmTokens: [] },
+  financeAdmin: { role: "admin", status: "active", name: "مدير مالية", permissions: ["finance"], fcmTokens: [] },
 };
 
 test.before(async () => {
@@ -46,6 +47,8 @@ test.beforeEach(async () => {
     await setDoc(doc(db, "users/c1/notifications/n1"), { title: "t", body: "b", read: false });
     await setDoc(doc(db, "store_balances/s1"), { payable: 100, settled: 0 });
     await setDoc(doc(db, "store_balances/s2"), { payable: 100, settled: 0 });
+    await setDoc(doc(db, "payment_proofs/o1"), { orderId: "o1", customerId: "c1", storeId: "s1", path: "payments/o1/a.jpg", payerAccount: "حساب", amount: 1000, status: "submitted" });
+    await setDoc(doc(db, "refund_requests/r1"), { orderId: "o1", customerId: "c1", storeId: "s1", amount: 500, status: "pending", kind: "customer" });
   });
 });
 
@@ -206,4 +209,36 @@ test("لا أحد يمنح الأدمن بكتابة مباشرة (الدور م
   await assertFails(updateDoc(doc(g, "users/c1"), { role: "admin" }));
   const c = env.authenticatedContext("c1").firestore();
   await assertFails(updateDoc(doc(c, "users/c1"), { role: "admin", permissions: ["users"] }));
+});
+
+// ---------- الدفع بالتحويل والاسترداد ----------
+test("إثبات التحويل: لصاحبه والإدارة المالية فقط، لا للتاجر ولا لزبون آخر ولا للمندوب", async () => {
+  await assertSucceeds(getDoc(doc(as("c1"), "payment_proofs/o1")));
+  await assertSucceeds(getDoc(doc(as("admin1"), "payment_proofs/o1")));
+  await assertSucceeds(getDoc(doc(as("financeAdmin"), "payment_proofs/o1")));
+  await assertFails(getDoc(doc(as("c2"), "payment_proofs/o1")));
+  await assertFails(getDoc(doc(as("m1"), "payment_proofs/o1")));
+  await assertFails(getDoc(doc(as("k1"), "payment_proofs/o1")));
+  await assertFails(getDoc(doc(as("limitedAdmin"), "payment_proofs/o1")));
+});
+
+test("طلبات الاسترداد: قراءة صاحبها والإدارة المالية فقط، والكتابة مغلقة للجميع", async () => {
+  await assertSucceeds(getDoc(doc(as("c1"), "refund_requests/r1")));
+  await assertSucceeds(getDoc(doc(as("financeAdmin"), "refund_requests/r1")));
+  await assertFails(getDoc(doc(as("c2"), "refund_requests/r1")));
+  await assertFails(getDoc(doc(as("m1"), "refund_requests/r1")));
+  await assertSucceeds(getDocs(query(collection(as("c1"), "refund_requests"), where("customerId", "==", "c1"), where("orderId", "==", "o1"))));
+  await assertFails(getDocs(query(collection(as("c1"), "refund_requests"), where("orderId", "==", "o1"))));
+  await assertFails(setDoc(doc(as("c1"), "refund_requests/r9"), { customerId: "c1", amount: 1, status: "pending" }));
+  await assertFails(updateDoc(doc(as("c1"), "refund_requests/r1"), { status: "refunded" }));
+  await assertFails(updateDoc(doc(as("admin1"), "refund_requests/r1"), { status: "refunded" }));
+  await assertFails(setDoc(doc(as("c1"), "payment_proofs/o9"), { customerId: "c1", status: "verified" }));
+  await assertFails(updateDoc(doc(as("c1"), "payment_proofs/o1"), { status: "verified" }));
+});
+
+test("مدير المالية يقرأ الطلبات (لقائمة الإثباتات المعلّقة) دون أن يكتب فيها", async () => {
+  await assertSucceeds(getDoc(doc(as("financeAdmin"), "orders/o1")));
+  await assertSucceeds(getDocs(query(collection(as("financeAdmin"), "orders"), where("status", "==", "pending_merchant"))));
+  await assertFails(updateDoc(doc(as("financeAdmin"), "orders/o1"), { paymentStatus: "verified" }));
+  await assertFails(updateDoc(doc(as("c1"), "orders/o1"), { paymentStatus: "verified", paidAmount: 999 }));
 });

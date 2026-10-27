@@ -5,6 +5,8 @@ import { addEntry, bumpBalance } from "./finance";
 import { canTransition } from "./stateMachine";
 import { permissionForStatusChange } from "./permissions";
 import { courierCommissionFor, evaluateStatusChange, GuardOrder, isNoWorseReview } from "./orderGuards";
+import { cashDueAtDelivery, overpaidAmount, PAYMENT_METHODS } from "./paymentLogic";
+import { autoRefundRef, writeAutoRefund } from "./refunds";
 import {
   Actor, arr, callable, db, docId, int, loadActor, obj, oneOf, optStr, optPhone, readSettings, str,
   submissionKey, writeAudit,
@@ -43,6 +45,9 @@ export const createOrder = callable(async (req) => {
     const pid = docId(it.productId, "productId");
     merged.set(pid, Math.min(99, (merged.get(pid) ?? 0) + int(it.qty, "qty", 1, 99)));
   }
+  const paymentMethod = d.paymentMethod === undefined || d.paymentMethod === null
+    ? "cash_on_delivery"
+    : oneOf(d.paymentMethod, "paymentMethod", PAYMENT_METHODS);
   optPhone(d.phone); // يُتحقق من صحته فقط ولا يُحفظ في الطلب: رقم الزبون خاص
   const address = str(d.address, "address", 3, 300);
   const locationNote = optStr(d.locationNote, "locationNote", 300);
@@ -63,6 +68,7 @@ export const createOrder = callable(async (req) => {
     if (idem.exists) return { orderId: idem.get("orderId") as string, duplicate: true };
 
     if (!settings.ordersEnabled) throw new HttpsError("failed-precondition", "orders_disabled");
+    if (paymentMethod === "bank_transfer" && settings.transferEnabled !== true) throw new HttpsError("failed-precondition", "transfer_disabled");
     // سقف الطلبات المفتوحة لكل زبون (حماية من الإساءة)
     if (openOrders.size >= ((settings.maxOpenOrders as number) ?? 3)) throw new HttpsError("failed-precondition", "too_many_open_orders");
     if (!storeSnap.exists || storeSnap.get("status") !== "active") throw new HttpsError("failed-precondition", "store_unavailable");
@@ -99,7 +105,11 @@ export const createOrder = callable(async (req) => {
       discount: 0,
       total: itemsTotal + deliveryFee,
       totalsAreEstimate: true,
-      paymentMethod: "cash_on_delivery",
+      paymentMethod,
+      paymentStatus: paymentMethod === "bank_transfer" ? "awaiting_payment" : "not_required",
+      paidAmount: 0,
+      refundedAmount: 0,
+      refundOpenId: null,
       address,
       locationNote,
       submissionId,
@@ -158,25 +168,27 @@ export const proposeOrder = callable(async (req) => {
     const now = Timestamp.now();
     const changedAfterApproval = o.status !== "pending_merchant";
 
-    // قبول مباشر: نفس المنتجات والكميات وبأسعار مساوية أو أقل مما رآه الزبون، فلا حاجة لموافقة ثانية
+    // قبول مباشر: نفس المنتجات والكميات وبأسعار مساوية أو أقل مما رآه الزبون، فلا حاجة لموافقة ثانية.
+    // نقدًا: يبدأ التجهيز فورًا. بالتحويل: يصبح «تمت الموافقة» بانتظار الدفع (لا تجهيز قبل تأكيد استلام المبلغ).
     if (o.status === "pending_merchant" && isNoWorseReview(o.requestedItems, lines)) {
       const proposal = { items: lines, itemsTotal, deliveryFee, discount, total, note, revision, proposedAt: now, proposedBy: actor.uid };
+      const transfer = o.paymentMethod === "bank_transfer";
+      const toStatus: Status = transfer ? "confirmed" : "preparing";
       tx.update(ref, {
-        status: "preparing",
+        status: toStatus,
         proposal,
         approvedSnapshot: { ...proposal, approvedAt: now, approvedBy: o.customerId, autoApproved: true },
         approvedAt: now,
-        preparingAt: now,
-        preparingBy: actor.uid,
+        ...(transfer ? {} : { preparingAt: now, preparingBy: actor.uid }),
         itemsTotal,
         total,
         totalsAreEstimate: false,
         revision,
         updatedAt: now,
-        expiresAt: null,
+        expiresAt: transfer ? minutes(Number(settings.paymentWindowMinutes)) : null,
       });
-      history(tx, orderId, actor, o.status, "preparing", { revision, autoApproved: true });
-      writeAudit(tx, actor, "accept_order", "order", orderId, { revision, itemsTotal, total, autoApproved: true });
+      history(tx, orderId, actor, o.status, toStatus, { revision, autoApproved: true });
+      writeAudit(tx, actor, "accept_order", "order", orderId, { revision, itemsTotal, total, autoApproved: true, toStatus });
       return { ok: true, revision, autoAccepted: true };
     }
 
@@ -215,6 +227,8 @@ export const respondToProposal = callable(async (req) => {
     if (!snap.exists) throw new HttpsError("not-found", "order_not_found");
     const o = snap.data() as Order;
     assertAccess(actor, o);
+    const settings = await readSettings(tx);
+    const autoSnap = await tx.get(autoRefundRef(orderId));
     const now = Timestamp.now();
 
     if (decision === "approve") {
@@ -227,7 +241,9 @@ export const respondToProposal = callable(async (req) => {
         approvedSnapshot: { ...o.proposal, approvedAt: now, approvedBy: actor.uid },
         approvedAt: now,
         updatedAt: now,
-        expiresAt: null,
+        // بالتحويل وقبل الدفع: مهلة للدفع وإلا ينتهي الطلب
+        expiresAt: o.paymentMethod === "bank_transfer" && o.paymentStatus === "awaiting_payment"
+          ? minutes(Number(settings.paymentWindowMinutes)) : null,
       });
       history(tx, orderId, actor, "awaiting_customer", "confirmed", { revision, total: o.proposal.total });
       writeAudit(tx, actor, "approve_total", "order", orderId, { revision, total: o.proposal.total });
@@ -240,6 +256,10 @@ export const respondToProposal = callable(async (req) => {
       status: "cancelled", cancelReason: "declined_by_customer", cancelledAt: now, cancelledBy: actor.uid,
       cancelledByRole: "customer", updatedAt: now, expiresAt: null,
     });
+    // دفع الزبون قبل أن يرفض التعديل الجديد: يُرد له المبلغ
+    if (o.paymentStatus === "verified") {
+      writeAutoRefund(tx, autoSnap, orderId, o, "cancelled", Number(o.paidAmount ?? 0), "رفض الزبون التعديل بعد الدفع", null);
+    }
     history(tx, orderId, actor, o.status, "cancelled", { reason: "declined_by_customer" });
     writeAudit(tx, actor, "decline_total", "order", orderId, { revision });
     return { ok: true };
@@ -269,6 +289,8 @@ export const changeOrderStatus = callable(async (req) => {
     assertAccess(actor, o);
 
     const settings = await readSettings(tx);
+    // قراءة طلب الاسترداد التلقائي قبل أي كتابة (قاعدة المعاملات)
+    const autoSnap = await tx.get(autoRefundRef(orderId));
     const preparingAt = o.preparingAt as Timestamp | null | undefined;
     const verdict = evaluateStatusChange(
       actor.role, actor.uid,
@@ -281,16 +303,20 @@ export const changeOrderStatus = callable(async (req) => {
 
     const now = Timestamp.now();
     const patch: Record<string, unknown> = { status: to, updatedAt: now, expiresAt: null };
+    const paidAmount = o.paymentStatus === "verified" ? Number(o.paidAmount ?? 0) : 0;
 
     switch (to) {
       case "rejected":
         Object.assign(patch, { rejectReason: reason, rejectedAt: now, rejectedBy: actor.uid });
+        writeAutoRefund(tx, autoSnap, orderId, o, "cancelled", paidAmount, "رفض المتجر الطلب بعد الدفع", null);
         break;
       case "cancelled":
         Object.assign(patch, { cancelReason: reason, cancelledAt: now, cancelledBy: actor.uid, cancelledByRole: actor.role });
+        writeAutoRefund(tx, autoSnap, orderId, o, "cancelled", paidAmount, "إلغاء الطلب بعد الدفع", null);
         break;
       case "delivery_failed":
         Object.assign(patch, { failReason: reason, failedAt: now, failedBy: actor.uid });
+        writeAutoRefund(tx, autoSnap, orderId, o, "cancelled", paidAmount, "تعذّر تسليم الطلب بعد الدفع", null);
         break;
       case "preparing":
       case "ready_for_pickup": {
@@ -311,9 +337,14 @@ export const changeOrderStatus = callable(async (req) => {
         if (!a || a.revision !== o.revision) throw new HttpsError("failed-precondition", "total_not_approved");
         const itemsTotal = a.itemsTotal as number;
         const deliveryRevenue = (a.deliveryFee as number) - ((a.discount as number) ?? 0);
-        const collected = a.total as number;
+        // ما دُفع مسبقًا بالتحويل لا يحصّله المندوب: يحصّل الفرق فقط (نقدًا بالكامل إن لم يكن تحويلًا)
+        const collected = cashDueAtDelivery(a.total as number, paidAmount);
         // التسليم والقيود المالية في معاملة واحدة؛ المعرّفات الثابتة تمنع التكرار
-        addEntry(tx, `${orderId}__cash`, { orderId, storeId: o.storeId, ledger: "cash", type: "order_delivered", amount: collected, isTest: !!o.isTest }, actor);
+        if (collected > 0) {
+          addEntry(tx, `${orderId}__cash`, { orderId, storeId: o.storeId, ledger: "cash", type: "order_delivered", amount: collected, isTest: !!o.isTest }, actor);
+        }
+        // دفع الزبون أكثر من الإجمالي النهائي (نقص السعر بعد الدفع): يُرد الفرق تلقائيًا
+        writeAutoRefund(tx, autoSnap, orderId, o, "overpay", overpaidAmount(a.total as number, paidAmount), "فرق بين المدفوع والإجمالي النهائي", null);
         addEntry(tx, `${orderId}__store_payable`, {
           orderId, storeId: o.storeId, ledger: "store_payable", type: "order_delivered", amount: itemsTotal,
           balanceField: "payable", balanceDelta: itemsTotal, isTest: !!o.isTest,

@@ -197,15 +197,15 @@ private fun ProductEditor(storeId: String, p: Product?, onClose: () -> Unit) {
 fun StoreAccountScreen(storeId: String, name: String, onProfile: (() -> Unit)? = null) {
     val bal = rememberLoadable(storeId) { Repo.balance(storeId) }
     val entries = rememberLoadable(storeId) { Repo.storeLedger(storeId) }
-    val activity = LocalContext.current as android.app.Activity
-    val scope = rememberCoroutineScope()
+    var askOut by remember { mutableStateOf(false) }
+    if (askOut) com.maqdi.core.SignOutDialog(onDismiss = { askOut = false })
     Screen("حساب المتجر", actions = {
         if (onProfile != null) {
             androidx.compose.material3.IconButton(onClick = onProfile) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.AccountCircle, contentDescription = "الملف الشخصي")
             }
         }
-        androidx.compose.material3.IconButton(onClick = { scope.launch { com.maqdi.core.signOutAll(activity) } }) {
+        androidx.compose.material3.IconButton(onClick = { askOut = true }) {
             androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Logout, contentDescription = "تسجيل الخروج")
         }
     }) { pad ->

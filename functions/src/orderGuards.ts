@@ -1,5 +1,6 @@
 import { ActorRole, Status } from "./config";
 import { canTransition } from "./stateMachine";
+import { paymentBlocksPreparing } from "./paymentLogic";
 
 // قواعد الحماية الخالصة لتغيير حالة الطلب (بلا Firestore) كي يمكن اختبارها مباشرة.
 // تُستعمل داخل معاملة changeOrderStatus في orders.ts.
@@ -9,6 +10,8 @@ export interface GuardOrder {
   approvedSnapshot?: { revision?: number } | null;
   courierUid?: string | null;
   preparingAtMs?: number | null; // لحظة بدء التجهيز (مللي ثانية)
+  paymentMethod?: string | null; // cash_on_delivery | bank_transfer
+  paymentStatus?: string | null;
 }
 
 export interface GuardContext { nowMs: number; cancelGraceMs: number }
@@ -56,6 +59,9 @@ export function evaluateStatusChange(
   }
   if (role === "courier" && o.status === "out_for_delivery" && o.courierUid !== uid)
     return { kind: "reject", code: "not_your_delivery", httpCode: "permission-denied" };
+  // الدفع بالتحويل: لا تجهيز قبل أن تؤكد الإدارة استلام المبلغ
+  if (to === "preparing" && paymentBlocksPreparing(o.paymentMethod, o.paymentStatus))
+    return { kind: "reject", code: "payment_not_verified", httpCode: "failed-precondition" };
   if (NEEDS_APPROVAL.includes(to)) {
     const a = o.approvedSnapshot;
     if (!a || a.revision !== o.revision)

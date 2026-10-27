@@ -70,6 +70,15 @@ object ImageUtil {
         return path
     }
 
+    /** صورة إيصال التحويل: payments/{orderId}/{id}.jpg (يرفعها صاحب الطلب فقط حسب قواعد التخزين) */
+    suspend fun uploadPaymentProof(ctx: Context, orderId: String, uri: Uri): String {
+        val bytes = compress(ctx, uri, maxSide = 1600)
+        val path = "payments/$orderId/${UUID.randomUUID()}.jpg"
+        val meta = StorageMetadata.Builder().setContentType("image/jpeg").build()
+        put(path, bytes, meta)
+        return path
+    }
+
     /** يرفع البايتات ويحوّل أخطاء التخزين إلى رسالة عربية تبيّن السبب الحقيقي بدل رسالة «الاتصال» العامة */
     private suspend fun put(path: String, bytes: ByteArray, meta: StorageMetadata) {
         try {

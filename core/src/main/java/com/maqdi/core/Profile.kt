@@ -53,9 +53,10 @@ private fun normalizePhone(raw: String): String = buildString {
  */
 @Composable
 fun ProfileScreen(profile: Profile, onBack: (() -> Unit)? = null, showAddress: Boolean = false) {
-    val activity = LocalContext.current as Activity
+    val phoneAccount = isPhoneAccountEmail(profile.email)
+    var askOut by remember { mutableStateOf(false) }
     var name by rememberSaveable(profile.uid) { mutableStateOf(profile.name) }
-    var phone by rememberSaveable(profile.uid) { mutableStateOf(profile.phone.orEmpty()) }
+    var phone by rememberSaveable(profile.uid) { mutableStateOf(profile.phone ?: phoneFromAccountEmail(profile.email).orEmpty()) }
     var address by rememberSaveable(profile.uid) { mutableStateOf(profile.savedAddress.orEmpty()) }
     var saved by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
@@ -73,7 +74,7 @@ fun ProfileScreen(profile: Profile, onBack: (() -> Unit)? = null, showAddress: B
     val addressErr = if (showAddress && cleanAddress.length > 200) "العنوان أطول من 200 حرف." else null
     val valid = nameErr == null && phoneErr == null && addressErr == null
     val dirty = cleanName != profile.name ||
-        cleanPhone != normalizePhone(profile.phone.orEmpty()) ||
+        (!phoneAccount && cleanPhone != normalizePhone(profile.phone.orEmpty())) ||
         (showAddress && cleanAddress != profile.savedAddress.orEmpty().trim())
 
     fun touch() { saved = false; st.error = null }
@@ -91,7 +92,7 @@ fun ProfileScreen(profile: Profile, onBack: (() -> Unit)? = null, showAddress: B
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
-                            profile.name.ifBlank { profile.email }.trim().take(1),
+                            profile.name.ifBlank { if (phoneAccount) "م" else profile.email }.trim().take(1),
                             color = Mq.Green, fontSize = 28.sp, fontWeight = FontWeight.Bold,
                         )
                     }
@@ -99,15 +100,19 @@ fun ProfileScreen(profile: Profile, onBack: (() -> Unit)? = null, showAddress: B
                     Column(Modifier.weight(1f)) {
                         Text(profile.name.ifBlank { "بلا اسم" }, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                         Text(roleLabel(profile.role), color = Mq.Green, style = MaterialTheme.typography.bodySmall)
-                        Text(profile.email, color = Mq.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                        Text(
+                            if (phoneAccount) phoneFromAccountEmail(profile.email).orEmpty() else profile.email,
+                            color = Mq.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                        )
                     }
                 }
             }
             Section("بياناتي") {
                 Field("الاسم", name, { name = it.take(120); touch() }, Modifier.fillMaxWidth().padding(top = 8.dp), error = nameErr)
                 Field(
-                    "رقم الهاتف (اختياري)", phone, { phone = it.take(30); touch() },
+                    if (phoneAccount) "رقم الهاتف (رقم تسجيل الدخول)" else "رقم الهاتف (اختياري)", phone, { phone = it.take(30); touch() },
                     Modifier.fillMaxWidth().padding(top = 4.dp), keyboard = KeyboardType.Phone, error = phoneErr,
+                    enabled = !phoneAccount,
                 )
                 if (showAddress) {
                     Field(
@@ -116,7 +121,7 @@ fun ProfileScreen(profile: Profile, onBack: (() -> Unit)? = null, showAddress: B
                     )
                 }
                 Text(
-                    "البريد مرتبط بحساب Google ولا يمكن تعديله من هنا.",
+                    if (phoneAccount) "رقم الهاتف هو معرّف دخولك ولا يمكن تعديله من هنا." else "البريد مرتبط بحساب Google ولا يمكن تعديله من هنا.",
                     color = Mq.Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp),
                 )
             }
@@ -142,10 +147,11 @@ fun ProfileScreen(profile: Profile, onBack: (() -> Unit)? = null, showAddress: B
             }
             Spacer(Modifier.height(8.dp))
             ActionButton(
-                "تسجيل الخروج", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), tonal = true,
-            ) { signOutAll(activity) }
+                "تسجيل الخروج", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), destructive = true,
+            ) { askOut = true }
         }
     }
+    if (askOut) SignOutDialog(onDismiss = { askOut = false })
 
     if (confirmLeave && onBack != null) {
         ConfirmDialog(

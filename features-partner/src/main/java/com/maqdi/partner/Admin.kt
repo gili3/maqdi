@@ -207,6 +207,10 @@ fun FinanceScreen(profile: Profile, onStore: (String) -> Unit, onNav: (String) -
                 if (profile.can("expenses")) ActionButton("المصروفات", Modifier.weight(1f), tonal = true) { onNav("a_expenses") }
                 ActionButton("ملخص وتصدير", Modifier.weight(1f), tonal = true) { onNav("a_export") }
             }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton("إيصالات التحويل", Modifier.weight(1f), tonal = true) { onNav("a_payments") }
+                ActionButton("طلبات الاسترداد", Modifier.weight(1f), tonal = true) { onNav("a_refunds") }
+            }
             LoadableView(balances) { list ->
                 val owed = list.sumOf { it.outstanding }
                 Section("مستحقات المتاجر عليك") {
@@ -285,7 +289,8 @@ fun StoreFinanceScreen(storeId: String, onBack: () -> Unit) {
 }
 
 private fun ledgerLabel(l: String) = when (l) {
-    "cash" -> "النقد"; "store_payable" -> "مستحق المتجر"; "delivery_revenue" -> "إيراد التوصيل"; else -> l
+    "cash" -> "النقد"; "store_payable" -> "مستحق المتجر"; "delivery_revenue" -> "إيراد التوصيل"
+    "bank" -> "الحساب البنكي"; "refund_cost" -> "تكلفة الاسترداد"; else -> l
 }
 
 @Composable
@@ -317,13 +322,14 @@ private fun CorrectionDialog(e: Entry, onDismiss: () -> Unit) {
 // ---------- قائمة الإدارة ----------
 @Composable
 fun AdminMoreScreen(profile: Profile, onNav: (String) -> Unit) {
-    val activity = androidx.compose.ui.platform.LocalContext.current as Activity
+    var askOut by remember { mutableStateOf(false) }
+    if (askOut) com.maqdi.core.SignOutDialog(onDismiss = { askOut = false })
     Screen("الإدارة") { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionButton("الملف الشخصي", tonal = true) { onNav("profile") }
             adminMenuItems(profile).forEach { item -> ActionButton(item.label, tonal = true) { onNav(item.route) } }
             Text(profile.email, color = Mq.Muted, modifier = Modifier.padding(top = 12.dp))
-            ActionButton("تسجيل الخروج", destructive = true) { signOutAll(activity) }
+            ActionButton("تسجيل الخروج", destructive = true) { askOut = true }
         }
     }
 }
@@ -666,6 +672,13 @@ private fun SettingsForm(s: Settings, onAudit: (() -> Unit)? = null) {
     var grace by remember(s) { mutableStateOf(s.customerCancelGraceMinutes.toString()) }
     var commission by remember(s) { mutableStateOf(s.courierCommission.toString()) }
     var pickupMin by remember(s) { mutableStateOf(s.courierPickupMinutes.toString()) }
+    var transferOn by remember(s) { mutableStateOf(s.transferEnabled) }
+    var bank by remember(s) { mutableStateOf(s.transferBankName) }
+    var accNo by remember(s) { mutableStateOf(s.transferAccountNumber) }
+    var accName by remember(s) { mutableStateOf(s.transferAccountName) }
+    var payNote by remember(s) { mutableStateOf(s.transferNote) }
+    var payWindow by remember(s) { mutableStateOf(s.paymentWindowMinutes.toString()) }
+    var refundHours by remember(s) { mutableStateOf(s.refundWindowHours.toString()) }
     var saved by remember { mutableStateOf(false) }
     val feeV = fee.toLongOrNull()
     val mV = merchantMin.toLongOrNull()
@@ -674,7 +687,10 @@ private fun SettingsForm(s: Settings, onAudit: (() -> Unit)? = null) {
     val gV = grace.toLongOrNull()
     val comV = commission.toLongOrNull()
     val pkV = pickupMin.toLongOrNull()
-    val valid = feeV != null && feeV in 0..1_000_000 && mV != null && mV in 1..1440 && cV != null && cV in 1..1440 && oV != null && oV in 1..20 &&
+    val pwV = payWindow.toLongOrNull()
+    val rfV = refundHours.toLongOrNull()
+    val transferOk = !transferOn || (bank.trim().isNotEmpty() && accNo.trim().length >= 3 && accName.trim().length >= 2)
+    val valid = transferOk && pwV != null && pwV in 5..1440 && rfV != null && rfV in 1..720 && feeV != null && feeV in 0..1_000_000 && mV != null && mV in 1..1440 && cV != null && cV in 1..1440 && oV != null && oV in 1..20 &&
         gV != null && gV in 0..30 && comV != null && comV in 0..1_000_000 && pkV != null && pkV in 0..240
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -703,13 +719,38 @@ private fun SettingsForm(s: Settings, onAudit: (() -> Unit)? = null) {
             Field("بالدقائق (0 = لا إلغاء بعد القبول)", grace, { grace = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
             Text("بعد أن يقبل التاجر ويبدأ التجهيز، يستطيع الزبون الإلغاء خلال هذه المدة فقط.", color = Mq.Muted)
         }
+        Section("الدفع بالتحويل البنكي") {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("تفعيل الدفع بالتحويل"); Switch(checked = transferOn, onCheckedChange = { transferOn = it; saved = false })
+            }
+            Field("اسم البنك (مثل: بنك الخرطوم)", bank, { bank = it; saved = false }, Modifier.fillMaxWidth().padding(top = 8.dp))
+            Field("رقم الحساب", accNo, { accNo = it; saved = false }, Modifier.fillMaxWidth().padding(top = 8.dp))
+            Field("اسم صاحب الحساب", accName, { accName = it; saved = false }, Modifier.fillMaxWidth().padding(top = 8.dp))
+            Field("تعليمات للزبون (اختياري)", payNote, { payNote = it; saved = false }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = false)
+            Field("مهلة دفع الزبون بعد موافقته (دقائق)", payWindow, { payWindow = it.filter { c -> c.isDigit() }; saved = false },
+                Modifier.fillMaxWidth().padding(top = 8.dp), keyboard = KeyboardType.Number)
+            Text("إن لم يدفع الزبون في هذه المهلة ينتهي الطلب. أثناء مراجعة الإيصال لا تنتهي المهلة.", color = Mq.Muted)
+            if (transferOn && !transferOk) Text("أكمل اسم البنك ورقم الحساب واسم صاحبه لتفعيل الخيار.", color = Mq.Red)
+        }
+        Section("الاسترداد") {
+            Field("مدة طلب الاسترداد بعد التسليم (ساعات)", refundHours, { refundHours = it.filter { c -> c.isDigit() }; saved = false }, keyboard = KeyboardType.Number)
+            Text("بعدها لا يستطيع الزبون طلب استرداد من التطبيق.", color = Mq.Muted)
+        }
         Section("استقبال الطلبات") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("استقبال الطلبات مفعّل"); Switch(checked = enabled, onCheckedChange = { enabled = it; saved = false })
             }
         }
         ActionButton("حفظ", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), enabled = valid) {
-            Api.adminUpdateSettings(Settings(feeV ?: 0, mV ?: 15, cV ?: 30, enabled, oV ?: 3, gV ?: 3, comV ?: 0, pkV ?: 10))
+            Api.adminUpdateSettings(
+                s.copy(
+                    deliveryFee = feeV ?: 0, merchantReviewMinutes = mV ?: 15, customerApprovalMinutes = cV ?: 30, ordersEnabled = enabled,
+                    maxOpenOrders = oV ?: 3, customerCancelGraceMinutes = gV ?: 3, courierCommission = comV ?: 0, courierPickupMinutes = pkV ?: 10,
+                    transferEnabled = transferOn, transferBankName = bank.trim(), transferAccountNumber = accNo.trim(),
+                    transferAccountName = accName.trim(), transferNote = payNote.trim(),
+                    paymentWindowMinutes = pwV ?: 60, refundWindowHours = rfV ?: 48,
+                ),
+            )
             saved = true
         }
         if (saved) Text("تم الحفظ.", modifier = Modifier.padding(16.dp), color = Mq.Green)
@@ -804,9 +845,11 @@ fun ExportScreen(onBack: () -> Unit) {
                 Section("ملخص الفترة") {
                     InfoRow("إيراد التوصيل", money(sm.deliveryRevenue))
                     InfoRow("المصروفات", money(sm.expenses))
-                    InfoRow("الصافي (إيراد − مصروفات)", money(sm.netRevenue), bold = true)
+                    InfoRow("الصافي (إيراد − مصروفات − استرداد تتحمله المنصة)", money(sm.netRevenue), bold = true)
                     InfoRow("حركة النقد (محصَّل − مدفوع للمتاجر)", money(sm.cashNet))
                     InfoRow("صافي مستحقات المتاجر في الفترة", money(sm.storePayableNet))
+                    InfoRow("حركة الحساب البنكي (تحويلات واردة − مستردّات)", money(sm.bankNet))
+                    if (sm.refundCost > 0) InfoRow("استرداد تتحمله المنصة", money(sm.refundCost))
                     Text("مستحقات المتاجر ليست ربحًا للمنصة. الصافي أعلاه من إيراد التوصيل فقط.", color = Mq.Muted)
                 }
             }

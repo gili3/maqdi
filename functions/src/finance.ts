@@ -6,7 +6,9 @@ import {
 import { LOCAL_OFFSET_MS, STATUSES } from "./config";
 import { AggregateField } from "firebase-admin/firestore";
 
-export type Ledger = "cash" | "store_payable" | "delivery_revenue" | "courier_commission";
+// bank: الحساب البنكي للمنصة (تحويلات الزبائن الواردة والمستردّات الصادرة)
+// refund_cost: ما تتحمله المنصة من استرداد طلبه الزبون بعد التسليم (يُخصم من صافي الإيراد)
+export type Ledger = "cash" | "store_payable" | "delivery_revenue" | "courier_commission" | "bank" | "refund_cost";
 
 export interface EntryInput {
   orderId?: string | null;
@@ -52,7 +54,7 @@ export function bumpBalance(tx: Transaction, storeId: string, field: "payable" |
   );
 }
 
-function settlementState(payable: number, settled: number): "unsettled" | "partially_settled" | "settled" {
+export function settlementState(payable: number, settled: number): "unsettled" | "partially_settled" | "settled" {
   if (settled <= 0) return "unsettled";
   if (settled >= payable) return "settled";
   return "partially_settled";
@@ -264,11 +266,11 @@ export const adminFinanceSummary = callable(async (req) => {
     .where("createdAt", ">=", f).where("createdAt", "<", t)
     .aggregate({ total: AggregateField.sum("amount") }).get();
 
-  const [deliveryRevenue, cashNet, storePayableNet] = await Promise.all([
-    sumLedger("delivery_revenue"), sumLedger("cash"), sumLedger("store_payable"),
+  const [deliveryRevenue, cashNet, storePayableNet, bankNet, refundCost] = await Promise.all([
+    sumLedger("delivery_revenue"), sumLedger("cash"), sumLedger("store_payable"), sumLedger("bank"), sumLedger("refund_cost"),
   ]);
   const expenses = (exp.data().total as number | null) ?? 0;
-  return { deliveryRevenue, cashNet, storePayableNet, expenses, netRevenue: deliveryRevenue - expenses };
+  return { deliveryRevenue, cashNet, storePayableNet, bankNet, refundCost, expenses, netRevenue: deliveryRevenue - expenses - refundCost };
 });
 
 // ---------- لوحة الإحصائيات ----------

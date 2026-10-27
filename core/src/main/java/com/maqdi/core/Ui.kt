@@ -408,7 +408,7 @@ fun ConfirmDialog(title: String, text: String, confirmLabel: String, onDismiss: 
 private val urlCache = mutableMapOf<String, String>()
 
 @Composable
-fun StorageImage(path: String?, modifier: Modifier = Modifier) {
+fun StorageImage(path: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
     val placeholder = Modifier.background(Mq.Chip)
     if (path.isNullOrBlank()) {
         Box(modifier.then(placeholder), contentAlignment = Alignment.Center) { Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Mq.Muted) }
@@ -427,7 +427,7 @@ fun StorageImage(path: String?, modifier: Modifier = Modifier) {
         val u = url
         if (u == null) Box(modifier.then(placeholder)) else AsyncImage(
             model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current).data(u).crossfade(true).build(),
-            contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop,
+            contentDescription = null, modifier = modifier, contentScale = contentScale,
         )
     }
 }

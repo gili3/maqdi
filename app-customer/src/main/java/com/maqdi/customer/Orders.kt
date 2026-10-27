@@ -95,7 +95,8 @@ private fun OrderBody(o: Order, onReorder: () -> Unit) {
 
     // مهلة الإلغاء بعد قبول التاجر وبدء التجهيز (من إعدادات الإدارة)
     val settingsL = rememberLoadable { Repo.settings() }
-    val graceMs = ((settingsL as? com.maqdi.core.Loadable.Data<com.maqdi.core.Settings>)?.value?.customerCancelGraceMinutes ?: 3L) * 60_000L
+    val settings = (settingsL as? com.maqdi.core.Loadable.Data<com.maqdi.core.Settings>)?.value ?: com.maqdi.core.Settings()
+    val graceMs = settings.customerCancelGraceMinutes * 60_000L
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(o.status) { while (o.status == St.PREPARING) { delay(10_000); now = System.currentTimeMillis() } }
     val prepAt = o.preparingAt
@@ -148,8 +149,12 @@ private fun OrderBody(o: Order, onReorder: () -> Unit) {
             InfoRow("قيمة المنتجات", money(o.itemsTotal))
             InfoRow("رسوم التوصيل", money(o.deliveryFee))
             InfoRow("المبلغ المستحق", money(o.total), bold = true)
-            InfoRow("طريقة الدفع", "نقدًا عند الاستلام")
+            InfoRow("طريقة الدفع", com.maqdi.core.paymentMethodLabel(o.paymentMethod))
         }
+
+        // الدفع بالتحويل (إيصال وحالة) ثم سجل الاسترداد
+        PaymentSection(o, settings)
+        RefundSection(o, settings)
 
         Section("التوصيل") {
             InfoRow("العنوان", o.address)
@@ -195,7 +200,7 @@ private fun OrderBody(o: Order, onReorder: () -> Unit) {
         androidx.compose.material3.Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("المبلغ المستحق نقدًا", color = Mq.Muted)
+                    Text(if (o.isTransfer) "المبلغ المستحق بالتحويل" else "المبلغ المستحق نقدًا", color = Mq.Muted)
                     Text(money(o.total), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                 }
                 ActionButton("أوافق على الإجمالي") { showApprove = true }
@@ -207,7 +212,10 @@ private fun OrderBody(o: Order, onReorder: () -> Unit) {
 
     if (showApprove) {
         ConfirmDialog(
-            "تأكيد الموافقة", "ستدفع ${money(o.total)} نقدًا عند الاستلام. هل توافق؟", "نعم، أوافق",
+            "تأكيد الموافقة",
+            if (o.isTransfer) "ستحوّل ${money(o.total)} إلى حساب مقضي وترفع صورة الإيصال ليبدأ التجهيز. هل توافق؟"
+            else "ستدفع ${money(o.total)} نقدًا عند الاستلام. هل توافق؟",
+            "نعم، أوافق",
             onDismiss = { showApprove = false },
         ) { Api.respond(o.id, o.revision, true) }
     }

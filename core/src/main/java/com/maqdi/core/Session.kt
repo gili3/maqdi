@@ -99,7 +99,7 @@ class SessionViewModel : ViewModel() {
                     } else if (!ensureTried) {
                         ensureTried = true
                         _state.value = SessionState.Loading
-                        Api.ensureProfile(name) // يُنشئ الملف؛ اللقطة التالية تحمله
+                        Api.ensureProfile(name ?: PendingSignup.name) // يُنشئ الملف؛ اللقطة التالية تحمله
                     }
                     // p == null بعد المحاولة: نبقى في التحميل بانتظار اللقطة التالية
                 }
@@ -151,22 +151,6 @@ suspend fun signOutAll(activity: Activity) {
     // بعد الخروج تغادر الشاشة التركيب فيُلغى النطاق؛ نكمل مسح بيانات الاعتماد رغم ذلك
     withContext(NonCancellable) {
         try { CredentialManager.create(activity).clearCredentialState(ClearCredentialStateRequest()) } catch (_: Exception) { }
-    }
-}
-
-@Composable
-fun LoginScreen(title: String, subtitle: String, webClientId: String) {
-    val activity = LocalContext.current as Activity
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(8.dp))
-        Text(subtitle, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(32.dp))
-        ActionButton("تسجيل الدخول بحساب Google") { googleSignIn(activity, webClientId) }
     }
 }
 

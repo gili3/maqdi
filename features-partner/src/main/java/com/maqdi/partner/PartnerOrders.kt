@@ -53,6 +53,8 @@ import com.maqdi.core.StatusSteps
 import com.maqdi.core.Stepper
 import com.maqdi.core.dateTime
 import com.maqdi.core.money
+import com.maqdi.core.paymentMethodLabel
+import com.maqdi.core.paymentStatusLabel
 import com.maqdi.core.rememberLoadable
 import com.maqdi.core.settlementLabel
 
@@ -80,6 +82,16 @@ fun MerchantOrdersScreen(profile: Profile, onOpen: (String) -> Unit) {
         }
     }
 }
+
+// ---------- نص التسليم حسب طريقة الدفع (المندوب يحصّل نقدًا الفرق فقط عن المدفوع بالتحويل) ----------
+private fun deliverLabel(o: Order) =
+    if (o.cashDue > 0) "تم التسليم وتحصيل ${money(o.cashDue)}" else "تم التسليم (مدفوع بالتحويل)"
+
+private fun deliverMessage(o: Order) =
+    if (o.cashDue > 0) "هل استلمت ${money(o.cashDue)} نقدًا من الزبون؟ لا يمكن التراجع."
+    else "الطلب مدفوع بالتحويل ولا تحصيل نقدي. هل سلّمته للزبون؟ لا يمكن التراجع."
+
+private fun deliverConfirm(o: Order) = if (o.cashDue > 0) "نعم، تم التحصيل" else "نعم، تم التسليم"
 
 // ---------- شاشة التوصيل (موصّل أو مدير) ----------
 @Composable
@@ -114,7 +126,7 @@ fun CourierScreen(profile: Profile, onOpen: (String) -> Unit) {
                                 // إجراء سريع من القائمة بلا فتح التفاصيل
                                 PartnerOrderRow(o, showStore = true, onOpen = onOpen, trailing = {
                                     if (o.status == St.READY) ActionButton("استلمت الطلب") { Api.changeStatus(o.id, St.OUT) }
-                                    else ActionButton("تم التسليم وتحصيل ${money(o.total)}") { deliverFor = o }
+                                    else ActionButton(deliverLabel(o)) { deliverFor = o }
                                 })
                             }
                         }
@@ -123,7 +135,7 @@ fun CourierScreen(profile: Profile, onOpen: (String) -> Unit) {
             }
         }
         deliverFor?.let { d ->
-            ConfirmDialog("تأكيد التسليم", "هل استلمت ${money(d.total)} نقدًا من الزبون؟ لا يمكن التراجع.", "نعم، تم التحصيل",
+            ConfirmDialog("تأكيد التسليم", deliverMessage(d), deliverConfirm(d),
                 onDismiss = { deliverFor = null }) { Api.changeStatus(d.id, St.DELIVERED) }
         }
     }
@@ -176,6 +188,8 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
             o.locationNote?.let { InfoRow("وصف الموقع", it) }
             InfoRow("وقت الطلب", dateTime(o.createdAt))
             o.courierName?.let { InfoRow("الموصّل", it) }
+            InfoRow("طريقة الدفع", paymentMethodLabel(o.paymentMethod))
+            if (o.isTransfer) InfoRow("حالة الدفع", paymentStatusLabel(o.paymentStatus))
             o.rejectReason?.let { Text("سبب الرفض: $it", color = Mq.Red) }
             o.cancelReason?.let { Text("سبب الإلغاء: $it", color = Mq.Red) }
             o.failReason?.let { Text("سبب تعذّر التسليم: $it", color = Mq.Red) }
@@ -191,7 +205,11 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
         Section(if (o.totalsAreEstimate) "الإجمالي (تقديري)" else "الإجمالي") {
             InfoRow("قيمة المنتجات", money(o.itemsTotal))
             InfoRow("رسوم التوصيل", money(o.deliveryFee))
-            InfoRow("المطلوب من الزبون", money(o.total), bold = true)
+            InfoRow("إجمالي الطلب", money(o.total), bold = !o.isTransfer)
+            if (o.isTransfer && o.paymentStatus == "verified") {
+                InfoRow("مدفوع بالتحويل", money(o.paidAmount))
+                InfoRow("المطلوب نقدًا عند التسليم", money(o.cashDue), bold = true)
+            }
             if (o.status == St.DELIVERED && role == "admin") {
                 InfoRow("مستحق المتجر", money(o.payableAmount))
                 InfoRow("التسوية", "${settlementLabel(o.settlementStatus)} (${money(o.settledAmount)})")
@@ -211,7 +229,16 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
                 }
                 St.AWAITING -> Text("بانتظار موافقة الزبون على الإجمالي.", modifier = Modifier.padding(16.dp))
                 St.CONFIRMED -> {
-                    ActionButton("بدء التجهيز", pad) { Api.changeStatus(o.id, St.PREPARING) }
+                    if (o.isTransfer && o.paymentStatus != "verified") {
+                        // لا تجهيز قبل أن تؤكد الإدارة استلام التحويل (يفرضه الخادم أيضًا)
+                        Text(
+                            if (o.paymentStatus == "proof_submitted") "الزبون أرسل إيصال التحويل وهو قيد مراجعة الإدارة. ستصلك إشعار عند التأكيد."
+                            else "بانتظار تحويل الزبون للمبلغ. ستصلك إشعار حين يُؤكَّد الدفع ويمكنك بدء التجهيز.",
+                            modifier = Modifier.padding(16.dp),
+                        )
+                    } else {
+                        ActionButton("بدء التجهيز", pad) { Api.changeStatus(o.id, St.PREPARING) }
+                    }
                     ActionButton("تعديل الطلب (يحتاج موافقة جديدة)", pad, tonal = true) { editing = true }
                 }
                 St.PREPARING -> {
@@ -230,7 +257,7 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
                 if (o.status == St.READY) {
                     ActionButton("استلمت الطلب من المتجر") { Api.changeStatus(o.id, St.OUT) }
                 } else {
-                    ActionButton("تم التسليم وتحصيل ${money(o.total)}") { dialog = "deliver" }
+                    ActionButton(deliverLabel(o)) { dialog = "deliver" }
                     ActionButton("تعذّر التسليم", tonal = true) { dialog = "fail" }
                 }
             }
@@ -243,7 +270,7 @@ private fun PartnerOrderBody(o: Order, profile: Profile) {
         "cancel" -> ReasonDialog("إلغاء الطلب", "تأكيد الإلغاء", { dialog = null }) { Api.changeStatus(o.id, St.CANCELLED, it) }
         "fail" -> ReasonDialog("تعذّر التسليم", "تأكيد", { dialog = null }) { Api.changeStatus(o.id, St.FAILED, it) }
         "deliver" -> ConfirmDialog(
-            "تأكيد التسليم", "هل استلمت ${money(o.total)} نقدًا من الزبون؟ لا يمكن التراجع.", "نعم، تم التحصيل",
+            "تأكيد التسليم", deliverMessage(o), deliverConfirm(o),
             onDismiss = { dialog = null },
         ) { Api.changeStatus(o.id, St.DELIVERED) }
         else -> {}

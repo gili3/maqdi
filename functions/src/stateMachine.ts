@@ -13,6 +13,8 @@ export const TRANSITIONS: Rule[] = [
   // قبول الطلب كما هو (نفس المنتجات والكميات والأسعار التي رآها الزبون): يدخل التجهيز مباشرة
   // ولا يمرّ إلا عبر proposeOrder؛ حارس changeOrderStatus يرفضه لغياب لقطة الموافقة
   { from: "pending_merchant", to: "preparing", roles: ["merchant", "admin"] },
+  // طلب بالتحويل قبله التاجر كما هو: يصبح «تمت الموافقة» مباشرة بانتظار الدفع (لا يمرّ إلا عبر proposeOrder)
+  { from: "pending_merchant", to: "confirmed", roles: ["merchant", "admin"] },
   { from: "pending_merchant", to: "rejected", roles: ["merchant", "admin"] },
   { from: "pending_merchant", to: "cancelled", roles: ["customer", "admin"] },
   { from: "pending_merchant", to: "expired", roles: ["system"] },
@@ -26,6 +28,8 @@ export const TRANSITIONS: Rule[] = [
   { from: "confirmed", to: "preparing", roles: ["merchant", "admin"] },
   { from: "confirmed", to: "awaiting_customer", roles: ["merchant", "admin"] },
   { from: "confirmed", to: "cancelled", roles: ["customer", "merchant", "admin"] },
+  // انتهت مهلة دفع الزبون بالتحويل
+  { from: "confirmed", to: "expired", roles: ["system"] },
 
   { from: "preparing", to: "ready_for_pickup", roles: ["merchant", "admin"] },
   { from: "preparing", to: "awaiting_customer", roles: ["merchant", "admin"] },

@@ -23,6 +23,19 @@ service firebase.storage {
         && profile().role == 'admin'
         && hasPerm('stores');
     }
+    // صاحب الطلب (الزبون) أو إدارة مالية فعّالة
+    function activeProfile() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && profile().status == 'active';
+    }
+    function isOrderCustomer(orderId) {
+      return activeProfile()
+        && firestore.get(/databases/(default)/documents/orders/$(orderId)).data.customerId == request.auth.uid;
+    }
+    function isFinanceAdmin() {
+      return activeProfile() && profile().role == 'admin' && hasPerm('finance');
+    }
     function smallImage() {
       return request.resource.size < 1024 * 1024
         && request.resource.contentType.matches('image/.*');
@@ -40,6 +53,13 @@ service firebase.storage {
       allow read: if request.auth != null;
       allow create, update: if canManageStores() && smallImage();
       allow delete: if canManageStores();
+    }
+
+    // إيصالات التحويل: payments/{orderId}/{file} — يرفعها صاحب الطلب، ويقرؤها هو والإدارة المالية فقط
+    match /payments/{orderId}/{file} {
+      allow read: if isOrderCustomer(orderId) || isFinanceAdmin();
+      allow create, update: if isOrderCustomer(orderId) && smallImage();
+      allow delete: if false;
     }
 
     match /{allPaths=**} {

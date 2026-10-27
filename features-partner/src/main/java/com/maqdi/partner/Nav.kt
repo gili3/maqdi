@@ -8,6 +8,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -96,11 +97,12 @@ fun MeScreen(profile: Profile, onBack: (() -> Unit)? = null) = ProfileScreen(pro
 
 @Composable
 fun NoStoreScreen() {
-    val activity = LocalContext.current as Activity
+    var askOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (askOut) com.maqdi.core.SignOutDialog(onDismiss = { askOut = false })
     Screen("حسابك غير مكتمل") { pad ->
         Column(Modifier.padding(pad).padding(24.dp)) {
             Text("حساب التاجر هذا غير مربوط بمتجر. تواصل مع الإدارة لربطه بمتجرك ثم أعد فتح التطبيق.")
-            ActionButton("تسجيل الخروج", Modifier.fillMaxWidth().padding(top = 24.dp), tonal = true) { signOutAll(activity) }
+            ActionButton("تسجيل الخروج", Modifier.fillMaxWidth().padding(top = 24.dp), tonal = true) { askOut = true }
         }
     }
 }

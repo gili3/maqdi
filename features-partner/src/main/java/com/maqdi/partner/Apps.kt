@@ -126,6 +126,8 @@ fun AdminApp(profile: Profile) {
             composable("a_audit") { AuditScreen(onBack = { nav.popBackStack() }) }
             composable("a_expenses") { ExpensesScreen(onBack = { nav.popBackStack() }) }
             composable("a_export") { ExportScreen(onBack = { nav.popBackStack() }) }
+            composable("a_payments") { AdminPaymentsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.push("order/$it") }) }
+            composable("a_refunds") { AdminRefundsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.push("order/$it") }) }
             composable("fin_store/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) {
                 StoreFinanceScreen(it.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
@@ -142,6 +144,8 @@ fun adminMenuItems(profile: Profile): List<MqNavItem> = listOf(
     MqNavItem("a_users", "المستخدمون والصلاحيات", Icons.Default.People) to
         (profile.can("users") || profile.can("permissions") || profile.can("grant_admin")),
     MqNavItem("a_settings", "رسوم التوصيل والمُهَل", Icons.Default.Tune) to profile.can("settings"),
+    MqNavItem("a_payments", "إيصالات التحويل", Icons.Default.Payments) to profile.can("finance"),
+    MqNavItem("a_refunds", "طلبات الاسترداد", Icons.Default.Payments) to profile.can("finance"),
     // المصروفات والتصدير داخل تبويب «المالية»، وسجل التدقيق داخل «الرسوم والمُهَل»؛ تظهر هنا فقط لمن لا يملك ذلك التبويب
     MqNavItem("a_expenses", "المصروفات", Icons.Default.Payments) to (profile.can("expenses") && !profile.can("finance")),
     MqNavItem("a_audit", "سجل التدقيق", Icons.Default.Security) to (profile.can("audit") && !profile.can("settings")),

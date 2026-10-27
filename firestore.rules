@@ -72,7 +72,7 @@ service cloud.firestore {
       allow read: if isActive() && (
         resource.data.customerId == request.auth.uid
         || (isMerchantOf(resource.data.storeId) && roleCan('orders'))
-        || can('orders') || can('deliveries')
+        || can('orders') || can('deliveries') || can('finance')
         // الجاهزة للاستلام يراها كل موصّل؛ أما «في الطريق» فيراها الموصّل المستلِم فقط (السطر التالي)
         || (isCourier() && roleCan('deliveries') && resource.data.status == 'ready_for_pickup')
         || (isCourier() && roleCan('deliveries') && resource.data.courierUid == request.auth.uid)
@@ -87,6 +87,17 @@ service cloud.firestore {
         );
         allow write: if false;
       }
+    }
+
+    // ---------- الدفع بالتحويل والاسترداد (الكتابة عبر Cloud Functions فقط) ----------
+    // إثبات التحويل: للزبون صاحبه وللإدارة المالية فقط (لا يراه التاجر ولا المندوب)
+    match /payment_proofs/{orderId} {
+      allow read: if isActive() && (resource.data.customerId == request.auth.uid || can('finance'));
+      allow write: if false;
+    }
+    match /refund_requests/{id} {
+      allow read: if isActive() && (resource.data.customerId == request.auth.uid || can('finance'));
+      allow write: if false;
     }
 
     // ---------- المالية ----------

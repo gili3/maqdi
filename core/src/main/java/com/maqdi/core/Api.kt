@@ -55,6 +55,20 @@ private val errors = mapOf(
     "invalid_permissions" to "قائمة الصلاحيات غير صحيحة.",
     "invalid_storeId" to "اختر المتجر الذي يتبع له التاجر.",
     "invalid_email" to "البريد الإلكتروني غير صحيح.",
+    "transfer_disabled" to "الدفع بالتحويل غير متاح حاليًا. اختر الدفع نقدًا.",
+    "transfer_details_required" to "أدخل اسم البنك ورقم الحساب واسم صاحبه قبل تفعيل الدفع بالتحويل.",
+    "payment_not_verified" to "لم يُؤكَّد استلام الدفع بعد، فلا يمكن بدء التجهيز.",
+    "payment_not_open" to "يمكن رفع الإيصال بعد موافقتك على الإجمالي فقط.",
+    "already_paid" to "تم تأكيد دفع هذا الطلب مسبقًا.",
+    "not_transfer_order" to "هذا الطلب ليس بالتحويل.",
+    "no_proof_to_review" to "لا يوجد إيصال بانتظار المراجعة.",
+    "invalid_proofPath" to "تعذّر ربط صورة الإيصال. أعد المحاولة.",
+    "refund_not_allowed" to "يمكن طلب الاسترداد بعد تسليم الطلب فقط.",
+    "refund_already_open" to "لديك طلب استرداد قيد المراجعة لهذا الطلب.",
+    "refund_window_closed" to "انتهت مدة طلب الاسترداد لهذا الطلب.",
+    "refund_amount_exceeds" to "المبلغ أكبر من المتاح للاسترداد.",
+    "refund_already_resolved" to "تم البتّ في هذا الطلب مسبقًا.",
+    "refund_not_found" to "طلب الاسترداد غير موجود.",
     "data_unavailable" to "البيانات غير جاهزة بعد (قد تكون الفهارس قيد الإنشاء). انتظر دقائق ثم أعد المحاولة.",
 )
 
@@ -95,12 +109,12 @@ object Api {
     // ---------- الطلبات ----------
     suspend fun createOrder(
         submissionId: String, storeId: String, items: List<Pair<String, Int>>,
-        phone: String, address: String, note: String?,
+        phone: String, address: String, note: String?, paymentMethod: String = "cash_on_delivery",
     ): String {
         val r = call("createOrder", mapOf(
             "submissionId" to submissionId, "storeId" to storeId,
             "items" to items.map { mapOf("productId" to it.first, "qty" to it.second) },
-            "phone" to phone, "address" to address, "locationNote" to note,
+            "phone" to phone, "address" to address, "locationNote" to note, "paymentMethod" to paymentMethod,
         ))
         return r["orderId"] as? String ?: throw ApiException("ردّ غير متوقع من الخادم.")
     }
@@ -119,6 +133,32 @@ object Api {
 
     suspend fun changeStatus(orderId: String, to: String, reason: String? = null) {
         call("changeOrderStatus", mapOf("orderId" to orderId, "to" to to, "reason" to reason))
+    }
+
+    // ---------- الدفع بالتحويل والاسترداد ----------
+    suspend fun submitTransferProof(orderId: String, proofPath: String, payerAccount: String, transferRef: String?) {
+        call("submitTransferProof", mapOf("orderId" to orderId, "proofPath" to proofPath, "payerAccount" to payerAccount, "transferRef" to transferRef))
+    }
+
+    /** verify: receivedAmount اختياري (الافتراضي مبلغ الإثبات) | reject: reason مطلوب */
+    suspend fun adminReviewPayment(orderId: String, verify: Boolean, receivedAmount: Long?, reason: String?) {
+        call("adminReviewPayment", mapOf(
+            "orderId" to orderId, "decision" to if (verify) "verify" else "reject",
+            "receivedAmount" to receivedAmount, "reason" to reason,
+        ))
+    }
+
+    suspend fun createRefundRequest(orderId: String, amount: Long, reason: String, refundAccount: String, key: String) {
+        call("createRefundRequest", mapOf("orderId" to orderId, "amount" to amount, "reason" to reason, "refundAccount" to refundAccount, "refundKey" to key))
+    }
+
+    suspend fun adminResolveRefund(
+        refundId: String, refund: Boolean, approvedAmount: Long?, reference: String?, adminNote: String?, chargeStore: Boolean,
+    ) {
+        call("adminResolveRefund", mapOf(
+            "refundId" to refundId, "decision" to if (refund) "refund" else "reject", "approvedAmount" to approvedAmount,
+            "reference" to reference, "adminNote" to adminNote, "chargeStore" to chargeStore,
+        ))
     }
 
     // ---------- المنتجات والمتاجر ----------
@@ -199,6 +239,10 @@ object Api {
             "customerApprovalMinutes" to s.customerApprovalMinutes, "ordersEnabled" to s.ordersEnabled,
             "maxOpenOrders" to s.maxOpenOrders, "customerCancelGraceMinutes" to s.customerCancelGraceMinutes,
             "courierCommission" to s.courierCommission, "courierPickupMinutes" to s.courierPickupMinutes,
+            "transferEnabled" to s.transferEnabled, "transferBankName" to s.transferBankName,
+            "transferAccountNumber" to s.transferAccountNumber, "transferAccountName" to s.transferAccountName,
+            "transferNote" to s.transferNote, "paymentWindowMinutes" to s.paymentWindowMinutes,
+            "refundWindowHours" to s.refundWindowHours,
         ))
     }
 
@@ -221,12 +265,13 @@ object Api {
 
     data class Summary(
         val deliveryRevenue: Long, val cashNet: Long, val storePayableNet: Long, val expenses: Long, val netRevenue: Long,
+        val bankNet: Long = 0, val refundCost: Long = 0,
     )
 
     suspend fun adminSummary(from: String, to: String): Summary {
         val r = call("adminFinanceSummary", mapOf("from" to from, "to" to to))
         fun n(k: String) = (r[k] as? Number)?.toLong() ?: 0L
-        return Summary(n("deliveryRevenue"), n("cashNet"), n("storePayableNet"), n("expenses"), n("netRevenue"))
+        return Summary(n("deliveryRevenue"), n("cashNet"), n("storePayableNet"), n("expenses"), n("netRevenue"), n("bankNet"), n("refundCost"))
     }
 
     /** الأرقام null = تعذّر حسابها (مثل فهرس غير جاهز)؛ partial = بعض الأجزاء ناقصة */

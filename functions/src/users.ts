@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { allPermissions, effectivePermissions, isSubset, validatePermissionList } from "./permissions";
+import { phoneFromAuthEmail } from "./authLogic";
 import { callable, db, email, int, bool, obj, oneOf, optStr, str, docId, loadActor, writeAudit } from "./util";
 
 // تُستدعى بعد أول تسجيل دخول بـ Google لإنشاء الملف الشخصي.
@@ -8,8 +9,12 @@ import { callable, db, email, int, bool, obj, oneOf, optStr, str, docId, loadAct
 export const ensureProfile = callable(async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "login_required");
   const token = req.auth.token as Record<string, unknown>;
-  if (token.email_verified !== true || typeof token.email !== "string") throw new HttpsError("permission-denied", "email_not_verified");
+  if (typeof token.email !== "string") throw new HttpsError("permission-denied", "email_not_verified");
   const mail = token.email.toLowerCase();
+  // حساب هاتف (بريد داخلي + كلمة مرور فقط) أو حساب Google موثَّق البريد؛ غير ذلك مرفوض
+  const fb = token.firebase as { sign_in_provider?: string } | undefined;
+  const phone = fb?.sign_in_provider === "password" ? phoneFromAuthEmail(mail) : null;
+  if (!phone && token.email_verified !== true) throw new HttpsError("permission-denied", "email_not_verified");
   const d = obj(req.data);
   const name = optStr(d.name, "name", 80) ?? (typeof token.name === "string" ? token.name.slice(0, 80) : "");
 
@@ -18,7 +23,7 @@ export const ensureProfile = callable(async (req) => {
     const u = await tx.get(uref);
     if (u.exists) return { role: u.get("role"), status: u.get("status"), storeId: u.get("storeId") ?? null };
     const now = Timestamp.now();
-    tx.create(uref, { email: mail, name, phone: null, role: "customer", storeId: null, permissions: null, status: "active", isTestAccount: false, savedAddress: null, fcmTokens: [], createdAt: now, updatedAt: now });
+    tx.create(uref, { email: mail, name, phone, role: "customer", storeId: null, permissions: null, status: "active", isTestAccount: false, savedAddress: null, fcmTokens: [], createdAt: now, updatedAt: now });
     return { role: "customer", status: "active", storeId: null };
   });
 });
@@ -140,10 +145,21 @@ export const adminUpdateSettings = callable(async (req) => {
   if (d.courierCommission !== undefined) patch.courierCommission = int(d.courierCommission, "courierCommission", 0, 1_000_000);
   if (d.courierPickupMinutes !== undefined) patch.courierPickupMinutes = int(d.courierPickupMinutes, "courierPickupMinutes", 0, 240);
   if (d.customerCancelGraceMinutes !== undefined) patch.customerCancelGraceMinutes = int(d.customerCancelGraceMinutes, "customerCancelGraceMinutes", 0, 30);
+  if (d.transferEnabled !== undefined) patch.transferEnabled = bool(d.transferEnabled, "transferEnabled");
+  if (d.transferBankName !== undefined) patch.transferBankName = d.transferBankName === "" ? "" : str(d.transferBankName, "transferBankName", 1, 80);
+  if (d.transferAccountNumber !== undefined) patch.transferAccountNumber = d.transferAccountNumber === "" ? "" : str(d.transferAccountNumber, "transferAccountNumber", 3, 60);
+  if (d.transferAccountName !== undefined) patch.transferAccountName = d.transferAccountName === "" ? "" : str(d.transferAccountName, "transferAccountName", 2, 80);
+  if (d.transferNote !== undefined) patch.transferNote = d.transferNote === "" ? "" : str(d.transferNote, "transferNote", 1, 300);
+  if (d.paymentWindowMinutes !== undefined) patch.paymentWindowMinutes = int(d.paymentWindowMinutes, "paymentWindowMinutes", 5, 1440);
+  if (d.refundWindowHours !== undefined) patch.refundWindowHours = int(d.refundWindowHours, "refundWindowHours", 1, 720);
+  // لا يُفعَّل التحويل بلا بيانات حساب كاملة (الحالية أو الجديدة)
   return db.runTransaction(async (tx) => {
     const actor = await loadActor(req, ["admin"], tx, { admin: "settings" });
     const ref = db.doc("settings/app");
     const old = await tx.get(ref);
+    const merged = { ...(old.data() ?? {}), ...patch } as Record<string, unknown>;
+    if (merged.transferEnabled === true && (!merged.transferBankName || !merged.transferAccountNumber || !merged.transferAccountName))
+      throw new HttpsError("failed-precondition", "transfer_details_required");
     tx.set(ref, patch, { merge: true });
     writeAudit(tx, actor, "update_settings", "settings", "app", { old: old.data() ?? null, new: patch });
     return { ok: true };

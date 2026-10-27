@@ -147,7 +147,33 @@ fun todayKhartoum(): String {
     return f.format(Date())
 }
 
+fun paymentMethodLabel(m: String) = if (m == "bank_transfer") "تحويل بنكي" else "نقدًا عند الاستلام"
+
+fun paymentStatusLabel(s: String) = when (s) {
+    "awaiting_payment" -> "بانتظار التحويل"
+    "proof_submitted" -> "الإيصال قيد المراجعة"
+    "verified" -> "تم استلام الدفع"
+    else -> "—"
+}
+
+fun refundStatusLabel(s: String) = when (s) {
+    "pending" -> "قيد المراجعة"
+    "refunded" -> "تم الاسترداد"
+    "rejected" -> "مرفوض"
+    else -> s
+}
+
+fun refundKindLabel(k: String) = when (k) {
+    "customer" -> "طلب استرداد من الزبون"
+    "overpay" -> "فرق دفع زائد"
+    else -> "استرداد لطلب لم يكتمل"
+}
+
 fun entryTypeLabel(t: String) = when (t) {
+    "transfer_received" -> "تحويل مستلم من زبون"
+    "refund_paid" -> "استرداد مدفوع للزبون"
+    "refund_charged" -> "استرداد خُصم من مستحقك"
+    "refund_cost" -> "استرداد تتحمله المنصة"
     "order_delivered" -> "مستحق عن طلب مسلَّم"
     "settlement" -> "تسوية (دُفع للمتجر)"
     "correction" -> "تصحيح"

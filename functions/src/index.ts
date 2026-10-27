@@ -4,5 +4,7 @@ export { adminUpsertStore, upsertProduct, setStoreOpen } from "./catalog";
 export { createOrder, proposeOrder, respondToProposal, changeOrderStatus } from "./orders";
 export { adminRecordSettlement, adminCorrectEntry, adminAddExpense, adminExportFinancialCsv, adminDashboard, adminFinanceSummary } from "./finance";
 export { expireOrders, alertUnclaimedOrders } from "./scheduled";
-export { onOrderChanged } from "./notifications";
+export { onOrderChanged, onRefundChanged } from "./notifications";
+export { submitTransferProof, adminReviewPayment } from "./payments";
+export { createRefundRequest, adminResolveRefund } from "./refunds";
 export { adminReport, merchantReport, courierReport } from "./reports";

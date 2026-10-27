@@ -62,6 +62,7 @@ fun AppShell(
     content: @Composable () -> Unit,
 ) {
     var show by remember { mutableStateOf(false) }
+    var askOut by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val activity = LocalContext.current as Activity
@@ -94,6 +95,7 @@ fun AppShell(
                 }
             }
         }
+        if (askOut) SignOutDialog(onDismiss = { askOut = false })
         if (menu.isEmpty()) {
             body()
         } else {
@@ -112,7 +114,7 @@ fun AppShell(
                         },
                         onSignOut = {
                             scope.launch { drawerState.close() }
-                            scope.launch { signOutAll(activity) }
+                            askOut = true
                         },
                     )
                 },

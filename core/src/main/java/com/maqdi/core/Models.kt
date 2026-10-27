@@ -42,9 +42,21 @@ data class Order(
     val courierName: String?, val courierUid: String?, val isTest: Boolean,
     val preparingAt: Long? = null,
     val courierPhone: String? = null,
+    val paymentMethod: String = "cash_on_delivery",
+    val paymentStatus: String = "not_required",
+    val paidAmount: Long = 0,
+    val paymentRejectReason: String? = null,
+    val deliveredAt: Long? = null,
+    val refundedAmount: Long = 0,
+    val refundOpenId: String? = null,
 ) {
     /** الأسطر المعروضة: اقتراح التاجر إن وُجد وإلا ما طلبه الزبون */
     val shownLines: List<Line> get() = proposal?.items ?: requestedItems
+
+    val isTransfer: Boolean get() = paymentMethod == "bank_transfer"
+
+    /** المطلوب نقدًا عند التسليم: الإجمالي ناقص ما أُكّد استلامه بالتحويل (نقدًا: الإجمالي كله) */
+    val cashDue: Long get() = (total - paidAmount.coerceAtLeast(0)).coerceAtLeast(0)
 }
 
 data class Settings(
@@ -52,6 +64,22 @@ data class Settings(
     val customerApprovalMinutes: Long = 30, val ordersEnabled: Boolean = true,
     val maxOpenOrders: Long = 3, val customerCancelGraceMinutes: Long = 3,
     val courierCommission: Long = 0, val courierPickupMinutes: Long = 10,
+    val transferEnabled: Boolean = false, val transferBankName: String = "", val transferAccountNumber: String = "",
+    val transferAccountName: String = "", val transferNote: String = "",
+    val paymentWindowMinutes: Long = 60, val refundWindowHours: Long = 48,
+)
+
+/** إثبات التحويل (يراه الزبون صاحبه والإدارة المالية فقط) */
+data class PaymentProof(
+    val orderId: String, val path: String, val transferRef: String?, val payerAccount: String, val amount: Long,
+    val status: String, val rejectReason: String?, val submittedAt: Long?,
+)
+
+data class RefundRequest(
+    val id: String, val orderId: String, val customerName: String, val storeName: String,
+    val kind: String, val source: String, val amount: Long, val approvedAmount: Long?, val reason: String,
+    val refundAccount: String?, val status: String, val reference: String?, val adminNote: String?,
+    val chargedToStore: Long, val createdAt: Long?, val resolvedAt: Long?, val paymentMethod: String,
 )
 
 data class AppNotification(
@@ -149,6 +177,10 @@ fun DocumentSnapshot.toOrder(): Order {
         courierName = getString("courierName"), courierUid = getString("courierUid"), isTest = getBoolean("isTest") ?: false,
         preparingAt = time("preparingAt"),
         courierPhone = getString("courierPhone"),
+        paymentMethod = getString("paymentMethod") ?: "cash_on_delivery",
+        paymentStatus = getString("paymentStatus") ?: "not_required",
+        paidAmount = lng("paidAmount"), paymentRejectReason = getString("paymentRejectReason"),
+        deliveredAt = time("deliveredAt"), refundedAmount = lng("refundedAmount"), refundOpenId = getString("refundOpenId"),
     )
 }
 
@@ -157,6 +189,25 @@ fun DocumentSnapshot.toSettings() = Settings(
     customerApprovalMinutes = getLong("customerApprovalMinutes") ?: 30, ordersEnabled = getBoolean("ordersEnabled") ?: true,
     maxOpenOrders = getLong("maxOpenOrders") ?: 3, customerCancelGraceMinutes = getLong("customerCancelGraceMinutes") ?: 3,
     courierCommission = getLong("courierCommission") ?: 0, courierPickupMinutes = getLong("courierPickupMinutes") ?: 10,
+    transferEnabled = getBoolean("transferEnabled") ?: false, transferBankName = getString("transferBankName") ?: "",
+    transferAccountNumber = getString("transferAccountNumber") ?: "", transferAccountName = getString("transferAccountName") ?: "",
+    transferNote = getString("transferNote") ?: "",
+    paymentWindowMinutes = getLong("paymentWindowMinutes") ?: 60, refundWindowHours = getLong("refundWindowHours") ?: 48,
+)
+
+fun DocumentSnapshot.toPaymentProof() = PaymentProof(
+    orderId = getString("orderId") ?: id, path = getString("path") ?: "", transferRef = getString("transferRef"),
+    payerAccount = getString("payerAccount") ?: "", amount = lng("amount"), status = getString("status") ?: "submitted",
+    rejectReason = getString("rejectReason"), submittedAt = time("submittedAt"),
+)
+
+fun DocumentSnapshot.toRefund() = RefundRequest(
+    id = id, orderId = getString("orderId") ?: "", customerName = getString("customerName") ?: "",
+    storeName = getString("storeName") ?: "", kind = getString("kind") ?: "customer", source = getString("source") ?: "customer",
+    amount = lng("amount"), approvedAmount = getLong("approvedAmount"), reason = getString("reason") ?: "",
+    refundAccount = getString("refundAccount"), status = getString("status") ?: "pending", reference = getString("reference"),
+    adminNote = getString("adminNote"), chargedToStore = lng("chargedToStore"), createdAt = time("createdAt"),
+    resolvedAt = time("resolvedAt"), paymentMethod = getString("paymentMethod") ?: "cash_on_delivery",
 )
 
 fun DocumentSnapshot.toNotification() = AppNotification(

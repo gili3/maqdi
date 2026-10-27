@@ -44,6 +44,9 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
     val settings = (settingsL as? Loadable.Data<Settings>)?.value ?: Settings()
     var phone by remember { mutableStateOf(profile.phone ?: "") }
     var address by remember { mutableStateOf(profile.savedAddress ?: "") }
+    var method by remember { mutableStateOf("cash_on_delivery") }
+    // لو عطّلت الإدارة التحويل بعد اختياره يرجع الاختيار نقدًا تلقائيًا
+    val payMethod = if (settings.transferEnabled) method else "cash_on_delivery"
 
     Screen("السلة") { pad ->
         if (Cart.lines.isEmpty()) {
@@ -79,9 +82,22 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
                     InfoRow("رسوم التوصيل", money(settings.deliveryFee))
                     InfoRow("المبلغ التقريبي", money(itemsTotal + settings.deliveryFee), bold = true)
                     Text(
-                        "التاجر سيراجع التوفر والأسعار، ثم يصلك الإجمالي النهائي لتوافق عليه قبل بدء التجهيز. الدفع نقدًا عند الاستلام.",
+                        "التاجر سيراجع التوفر والأسعار، ثم يصلك الإجمالي النهائي لتوافق عليه قبل بدء التجهيز. " +
+                            (if (payMethod == "bank_transfer") "الدفع بالتحويل البنكي بعد موافقتك." else "الدفع نقدًا عند الاستلام."),
                         style = MaterialTheme.typography.bodySmall, color = Mq.Muted, modifier = Modifier.padding(top = 6.dp),
                     )
+                }
+                if (settings.transferEnabled) {
+                    Section("طريقة الدفع") {
+                        PayOption("نقدًا عند الاستلام", payMethod == "cash_on_delivery") { method = "cash_on_delivery" }
+                        PayOption("تحويل بنكي (${settings.transferBankName})", payMethod == "bank_transfer") { method = "bank_transfer" }
+                        if (payMethod == "bank_transfer") {
+                            Text(
+                                "بعد موافقتك على الإجمالي النهائي تحوّل المبلغ وترفع صورة الإيصال، ثم يبدأ التجهيز بعد تأكيد الإدارة استلامه.",
+                                style = MaterialTheme.typography.bodySmall, color = Mq.Muted, modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
                 }
                 Section("بيانات التوصيل") {
                     Field("العنوان", address, { address = it }, Modifier.fillMaxWidth())
@@ -94,9 +110,9 @@ fun CartScreen(profile: Profile, onBrowse: () -> Unit, onOrderSent: (String) -> 
                 ) {
                     val storeId = Cart.storeId ?: throw com.maqdi.core.ApiException("السلة فارغة.")
                     // نفس البصمة = نفس معرّف الإرسال، فإعادة المحاولة بعد انقطاع الاتصال لا تنشئ طلبًا مكررًا
-                    val submissionId = Prefs.submissionFor(Cart.fingerprint(phone.trim(), address.trim()))
+                    val submissionId = Prefs.submissionFor(Cart.fingerprint(phone.trim() + "|" + payMethod, address.trim()))
                     val items = Cart.lines.values.map { it.product.id to it.qty }
-                    val orderId = Api.createOrder(submissionId, storeId, items, phone.trim(), address.trim(), null)
+                    val orderId = Api.createOrder(submissionId, storeId, items, phone.trim(), address.trim(), null, payMethod)
                     try { Repo.updateProfile(profile.uid, profile.name, phone.trim().ifBlank { null }, address.trim()) } catch (_: Exception) { }
                     Prefs.clearSubmission()
                     Cart.clear()

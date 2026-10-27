@@ -3,13 +3,14 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { REGION } from "./config";
 import { getMessaging } from "firebase-admin/messaging";
 import { db, readSettings, writeAudit } from "./util";
+import { autoRefundRef, writeAutoRefund } from "./refunds";
 
 // كل 5 دقائق: تنتقل الطلبات المنتهية المهلة إلى expired
 export const expireOrders = onSchedule({ schedule: "every 5 minutes", region: REGION, timeZone: "Africa/Khartoum" }, async () => {
   const now = Timestamp.now();
   const due = await db
     .collection("orders")
-    .where("status", "in", ["pending_merchant", "awaiting_customer"])
+    .where("status", "in", ["pending_merchant", "awaiting_customer", "confirmed"])
     .where("expiresAt", "<=", now)
     .limit(200)
     .get();
@@ -17,10 +18,17 @@ export const expireOrders = onSchedule({ schedule: "every 5 minutes", region: RE
   for (const doc of due.docs) {
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(doc.ref);
+      const autoSnap = await tx.get(autoRefundRef(doc.id));
       const o = snap.data();
-      if (!o || !["pending_merchant", "awaiting_customer"].includes(o.status)) return;
+      if (!o || !["pending_merchant", "awaiting_customer", "confirmed"].includes(o.status)) return;
       if (!o.expiresAt || (o.expiresAt as Timestamp).toMillis() > Date.now()) return;
+      // «تمت الموافقة» لا ينتهي إلا إن كان بانتظار تحويل الزبون (طلب بالتحويل لم يدفع في المهلة)
+      if (o.status === "confirmed" && !(o.paymentMethod === "bank_transfer" && o.paymentStatus === "awaiting_payment")) return;
       tx.update(doc.ref, { status: "expired", expiredAt: Timestamp.now(), updatedAt: Timestamp.now(), expiresAt: null });
+      // انتهت مهلة تعديل بعد أن دفع الزبون: يُرد له المبلغ
+      if (o.paymentStatus === "verified") {
+        writeAutoRefund(tx, autoSnap, doc.id, o, "cancelled", Number(o.paidAmount ?? 0), "انتهت مهلة الطلب بعد الدفع", null);
+      }
       tx.set(db.collection(`orders/${doc.id}/history`).doc(), { from: o.status, to: "expired", actorUid: "system", actorRole: "system", at: Timestamp.now() });
       writeAudit(tx, { uid: "system", role: "system" }, "order_expired", "order", doc.id, { from: o.status });
     });

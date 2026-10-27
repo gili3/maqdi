@@ -94,6 +94,24 @@ object Repo {
             ) { ready, mine -> ready + mine }
         }
 
+    // ---------- الدفع بالتحويل والاسترداد ----------
+    fun paymentProof(orderId: String) = db.document("payment_proofs/$orderId").docFlow { it.toPaymentProof() }
+
+    /** طلبات الزبون الواحد لطلب بعينه (شرطا مساواة فقط: بلا فهرس مركّب، والقاعدة تشترط customerId) */
+    fun refundsForOrder(uid: String, orderId: String) =
+        db.collection("refund_requests").whereEqualTo("customerId", uid).whereEqualTo("orderId", orderId)
+            .listFlow { it.toRefund() }.map { l -> l.sortedByDescending { it.createdAt ?: 0L } }
+
+    /** للإدارة المالية: حسب الحالة (pending/refunded/rejected)؛ الترتيب في التطبيق لتفادي فهرس مركّب */
+    fun adminRefunds(status: String) =
+        db.collection("refund_requests").whereEqualTo("status", status).limit(100)
+            .listFlow { it.toRefund() }.map { l -> l.sortedByDescending { it.createdAt ?: 0L } }
+
+    /** الطلبات التي رفع زبونها إيصال تحويل وتنتظر تأكيد الإدارة */
+    fun pendingPaymentOrders() =
+        db.collection("orders").whereEqualTo("paymentStatus", "proof_submitted").limit(100)
+            .listFlow { it.toOrder() }.map { l -> l.sortedBy { it.createdAt ?: 0L } }
+
     fun balance(storeId: String) = db.document("store_balances/$storeId").docFlow { it.toBalance() }
     fun balances() = db.collection("store_balances").listFlow { it.toBalance() }
     fun storeLedger(storeId: String) =

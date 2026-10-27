@@ -69,7 +69,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-/** لوحة الهوية البصرية الموحّدة (فاتح/داكن). الأساسي زمردي #087F5B والمساعد #20B486 */
+/** لوحة الهوية البصرية الموحّدة (فاتح/داكن). الأساسي أخضر زيتي #1F6F4A على خلفية كريمية دافئة #F7F4EC */
 @Immutable
 class MqPalette(
     val primary: Color, val onPrimary: Color, val primaryContainer: Color, val onPrimaryContainer: Color,
@@ -79,9 +79,9 @@ class MqPalette(
 )
 
 val MqLight = MqPalette(
-    primary = Color(0xFF087F5B), onPrimary = Color.White, primaryContainer = Color(0xFFD3F0E4), onPrimaryContainer = Color(0xFF04402D),
-    secondary = Color(0xFF20B486), bg = Color(0xFFF5F8F6), card = Color.White, ink = Color(0xFF202923), muted = Color(0xFF58675E),
-    line = Color(0xFFDCE5DF), chip = Color(0xFFE8EFEB), red = Color(0xFFB42318), amber = Color(0xFFB45309), blue = Color(0xFF1D4ED8),
+    primary = Color(0xFF1F6F4A), onPrimary = Color.White, primaryContainer = Color(0xFFE6F2EA), onPrimaryContainer = Color(0xFF123B2A),
+    secondary = Color(0xFF3FA37A), bg = Color(0xFFF7F4EC), card = Color.White, ink = Color(0xFF1B2620), muted = Color(0xFF5B665F),
+    line = Color(0xFFE7E0CF), chip = Color(0xFFEFE9DA), red = Color(0xFFB42318), amber = Color(0xFFB45309), blue = Color(0xFF1D4ED8),
     violet = Color(0xFF6D4FD6), teal = Color(0xFF0E7490), dark = false,
 )
 

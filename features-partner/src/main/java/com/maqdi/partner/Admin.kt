@@ -328,7 +328,7 @@ fun AdminMoreScreen(profile: Profile, onNav: (String) -> Unit) {
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionButton("الملف الشخصي", tonal = true) { onNav("profile") }
             adminMenuItems(profile).forEach { item -> ActionButton(item.label, tonal = true) { onNav(item.route) } }
-            Text(profile.email, color = Mq.Muted, modifier = Modifier.padding(top = 12.dp))
+            Text(profile.email.ifBlank { profile.phone.orEmpty() }, color = Mq.Muted, modifier = Modifier.padding(top = 12.dp))
             ActionButton("تسجيل الخروج", destructive = true) { askOut = true }
         }
     }
@@ -527,12 +527,12 @@ fun AdminUsersScreen(profile: Profile, onBack: () -> Unit) {
 
     Screen("المستخدمون والصلاحيات", onBack = onBack) { pad ->
         Column(Modifier.padding(pad)) {
-            Field("بحث بالاسم أو البريد", query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
+            Field("بحث بالاسم أو البريد أو الرقم", query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
             LoadableView(users) { list ->
                 val q = query.trim().lowercase()
                 val rank = mapOf("admin" to 0, "merchant" to 1, "courier" to 2)
-                val shown = list.filter { q.isEmpty() || it.email.lowercase().contains(q) || it.name.lowercase().contains(q) }
-                    .sortedWith(compareBy({ rank[it.role] ?: 3 }, { it.email }))
+                val shown = list.filter { q.isEmpty() || it.contact.lowercase().contains(q) || it.name.lowercase().contains(q) }
+                    .sortedWith(compareBy({ rank[it.role] ?: 3 }, { it.contact }))
                 if (shown.isEmpty()) {
                     Empty(if (list.isEmpty()) "لا يوجد مستخدمون مسجّلون بعد." else "لا نتائج.")
                 } else {
@@ -553,8 +553,8 @@ private fun UserCard(u: UserRow, isMe: Boolean, storeLabel: String?, onClick: ()
     val staff = u.role != "customer"
     MqCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), onClick = if (isMe) null else onClick) {
         Column(Modifier.padding(14.dp)) {
-            Text(u.name.ifBlank { u.email }, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-            Text(u.email, color = Mq.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            Text(u.name.ifBlank { u.contact }, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            Text(u.contact, color = Mq.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1)
             Text(
                 (if (staff) roleLabel(u.role) + (storeLabel?.let { " • $it" } ?: "") else "زبون") +
                     (if (u.status != "active") " • موقوف" else "") + (if (isMe) " • حسابك" else ""),
@@ -595,7 +595,7 @@ private fun RoleDialog(u: UserRow, actor: Profile, stores: List<Store>, onDismis
 
     if (confirmRevoke) {
         com.maqdi.core.ConfirmDialog(
-            "سحب صلاحية الأدمن", (u.name.ifBlank { u.email }) + " سيعود زبونًا عاديًا ويفقد كل صلاحياته الإدارية.", "سحب",
+            "سحب صلاحية الأدمن", (u.name.ifBlank { u.contact }) + " سيعود زبونًا عاديًا ويفقد كل صلاحياته الإدارية.", "سحب",
             onDismiss = { confirmRevoke = false },
         ) {
             Api.adminRevokeAdmin(u.uid)
@@ -605,10 +605,10 @@ private fun RoleDialog(u: UserRow, actor: Profile, stores: List<Store>, onDismis
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(u.name.ifBlank { u.email }) },
+        title = { Text(u.name.ifBlank { u.contact }) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(u.email, color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
+                Text(u.contact, color = Mq.Muted, style = MaterialTheme.typography.bodySmall)
                 if (options.isEmpty()) {
                     Text("لا تملك صلاحية تغيير الأدوار.", color = Mq.Muted)
                 } else {

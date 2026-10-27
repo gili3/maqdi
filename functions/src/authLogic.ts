@@ -1,10 +1,11 @@
-// حسابات الهاتف: لا رمز SMS، بل بريد داخلي مشتق من الرقم + كلمة مرور.
-// الرقم هنا غير موثَّق الملكية، لذلك لا يُمنح هذا الحساب إلا دور «زبون» (الدور يحدده الخادم دائمًا).
-export const PHONE_EMAIL_DOMAIN = "phone.maqdi.app";
+// الدخول بالهاتف: Firebase Phone Auth برمز SMS، فالرقم موثَّق الملكية فعلًا.
+// الخادم لا يثق بفحص التطبيق: يقبل فقط رقمًا سودانيًا بصيغة E.164 من توكن Firebase نفسه.
+// الدور يحدده الخادم دائمًا (زبون)؛ الترقية من شاشة المستخدمين فقط.
 
-/** "249912345678@phone.maqdi.app" → "+249912345678"، وأي بريد آخر → null */
-export function phoneFromAuthEmail(email: unknown): string | null {
-  if (typeof email !== "string") return null;
-  const m = /^(\d{8,15})@phone\.maqdi\.app$/.exec(email.trim().toLowerCase());
-  return m ? `+${m[1]}` : null;
+/** جوال سوداني: +249 ثم 9 أرقام تبدأ بـ 9 أو 1 (نفس قاعدة normalizeSudanPhone في التطبيق) */
+export const SUDAN_E164 = /^\+249[19]\d{8}$/;
+
+/** قيمة phone_number من توكن Firebase → الرقم إن كان سودانيًا صالحًا، وإلا null */
+export function sudanPhoneFromToken(v: unknown): string | null {
+  return typeof v === "string" && SUDAN_E164.test(v) ? v : null;
 }

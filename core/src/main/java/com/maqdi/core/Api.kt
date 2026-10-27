@@ -15,6 +15,7 @@ private val errors = mapOf(
     "account_suspended" to "حسابك موقوف. تواصل مع الإدارة.",
     "role_not_allowed" to "لا تملك صلاحية هذه العملية.",
     "email_not_verified" to "البريد غير موثّق.",
+    "phone_country_not_allowed" to "التسجيل برقم الهاتف متاح لأرقام السودان (+249) فقط.",
     "orders_disabled" to "استقبال الطلبات متوقف حاليًا.",
     "store_unavailable" to "المتجر غير متاح حاليًا.",
     "store_closed" to "المتجر مغلق حاليًا.",

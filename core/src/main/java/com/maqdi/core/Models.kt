@@ -104,8 +104,11 @@ data class Expense(val id: String, val amount: Long, val category: String, val n
 
 data class UserRow(
     val uid: String, val email: String, val name: String, val role: String, val status: String,
-    val storeId: String?, val isTestAccount: Boolean, val permissions: List<String>? = null,
-)
+    val storeId: String?, val isTestAccount: Boolean, val permissions: List<String>? = null, val phone: String? = null,
+) {
+    /** ما يُعرض للتعريف بالمستخدم: البريد، أو الرقم لحسابات الهاتف */
+    val contact: String get() = email.ifBlank { phone.orEmpty() }
+}
 
 // ---------- التحويل من Firestore ----------
 private fun DocumentSnapshot.lng(f: String): Long = getLong(f) ?: 0L
@@ -236,6 +239,6 @@ fun DocumentSnapshot.toExpense() = Expense(
 fun DocumentSnapshot.toUserRow() = UserRow(
     uid = id, email = getString("email") ?: "", name = getString("name") ?: "", role = getString("role") ?: "",
     status = getString("status") ?: "", storeId = getString("storeId"), isTestAccount = getBoolean("isTestAccount") ?: false,
-    permissions = strList("permissions"),
+    permissions = strList("permissions"), phone = getString("phone"),
 )
 

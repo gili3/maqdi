@@ -101,7 +101,7 @@ fun ProfileScreen(profile: Profile, onBack: (() -> Unit)? = null, showAddress: B
                         Text(profile.name.ifBlank { "بلا اسم" }, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                         Text(roleLabel(profile.role), color = Mq.Green, style = MaterialTheme.typography.bodySmall)
                         Text(
-                            if (phoneAccount) phoneFromAccountEmail(profile.email).orEmpty() else profile.email,
+                            if (phoneAccount) (profile.phone ?: phoneFromAccountEmail(profile.email)).orEmpty() else profile.email,
                             color = Mq.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1,
                         )
                     }
@@ -121,7 +121,7 @@ fun ProfileScreen(profile: Profile, onBack: (() -> Unit)? = null, showAddress: B
                     )
                 }
                 Text(
-                    if (phoneAccount) "رقم الهاتف هو معرّف دخولك ولا يمكن تعديله من هنا." else "البريد مرتبط بحساب Google ولا يمكن تعديله من هنا.",
+                    if (phoneAccount) "رقم الهاتف موثَّق وهو معرّف دخولك، ولا يمكن تعديله من هنا." else "البريد مرتبط بحساب Google ولا يمكن تعديله من هنا.",
                     color = Mq.Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp),
                 )
             }

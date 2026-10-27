@@ -61,17 +61,24 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
-import com.google.firebase.auth.FirebaseAuthUserCollisionException
-import com.google.firebase.auth.FirebaseAuthWeakPasswordException
+import com.google.firebase.FirebaseException
+import com.google.firebase.FirebaseTooManyRequestsException
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 
-// ---------- حسابات الهاتف: الرقم + كلمة المرور بلا رمز SMS ----------
-// يُحوَّل الرقم داخليًا إلى بريد مثل 249912345678@phone.maqdi.app؛ والخادم يمنح هذه الحسابات دور «زبون» فقط.
+// ---------- الدخول بالهاتف: رقم + رمز SMS (توثيق Firebase الحقيقي للرقم) ----------
+// الرقم موثَّق الملكية برمز يصل إلى الجوال. الخادم يمنح هذه الحسابات دور «زبون» فقط ولا يقبل إلا أرقام السودان.
 
-private const val PHONE_EMAIL_DOMAIN = "phone.maqdi.app"
-
-/** اسم الحساب الجديد يُحفظ هنا لحظة الإنشاء كي يصل إلى ensureProfile قبل أن يتوفر displayName */
+/** اسم الحساب الجديد يُحفظ هنا كي يصل إلى ensureProfile (حساب الهاتف بلا displayName) */
 object PendingSignup { @Volatile var name: String? = null }
 
 private fun latinDigits(raw: String): String = buildString {
@@ -91,46 +98,74 @@ fun normalizeSudanPhone(raw: String): String? {
     return if (d.length == 9 && (d[0] == '9' || d[0] == '1')) "249$d" else null
 }
 
-private fun phoneEmail(normalized: String) = "$normalized@$PHONE_EMAIL_DOMAIN"
+// حسابات قديمة أُنشئت ببريد داخلي (قبل الدخول برمز SMS): تبقى تعمل ويُعرض رقمها
+private const val LEGACY_PHONE_EMAIL_DOMAIN = "phone.maqdi.app"
 
-/** هل هذا الحساب حساب هاتف؟ (لإخفاء البريد الداخلي وعرض الرقم بدله) */
-fun isPhoneAccountEmail(email: String) = email.endsWith("@$PHONE_EMAIL_DOMAIN")
+/** هل هذا حساب هاتف؟ (قديم ببريد داخلي، أو جديد بلا بريد) لإخفاء البريد وعرض الرقم */
+fun isPhoneAccountEmail(email: String) = email.isBlank() || email.endsWith("@$LEGACY_PHONE_EMAIL_DOMAIN")
 
 fun phoneFromAccountEmail(email: String): String? =
-    if (isPhoneAccountEmail(email)) "+" + email.substringBefore('@') else null
+    if (email.endsWith("@$LEGACY_PHONE_EMAIL_DOMAIN")) "+" + email.substringBefore('@') else null
 
 private fun authError(e: Exception): ApiException = when (e) {
-    is FirebaseAuthUserCollisionException -> ApiException("هذا الرقم مسجّل مسبقًا. انتقل إلى «تسجيل دخول».")
-    is FirebaseAuthWeakPasswordException -> ApiException("كلمة المرور ضعيفة. استخدم 8 أحرف أو أرقام على الأقل.")
     is FirebaseNetworkException -> ApiException("تعذّر الاتصال. تحقق من الإنترنت وأعد المحاولة.")
+    is FirebaseTooManyRequestsException -> ApiException("محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.")
     is FirebaseAuthException -> when (e.errorCode) {
-        "ERROR_USER_NOT_FOUND", "ERROR_WRONG_PASSWORD", "ERROR_INVALID_CREDENTIAL", "ERROR_INVALID_EMAIL" ->
-            ApiException("الرقم أو كلمة المرور غير صحيحة.")
+        "ERROR_INVALID_VERIFICATION_CODE" -> ApiException("الرمز غير صحيح.")
+        "ERROR_SESSION_EXPIRED" -> ApiException("انتهت صلاحية الرمز. اطلب رمزًا جديدًا.")
+        "ERROR_INVALID_PHONE_NUMBER" -> ApiException("رقم الهاتف غير صحيح.")
+        "ERROR_QUOTA_EXCEEDED" -> ApiException("تعذّر إرسال الرمز الآن. حاول لاحقًا.")
         "ERROR_USER_DISABLED" -> ApiException("هذا الحساب معطّل. تواصل مع الإدارة.")
         "ERROR_TOO_MANY_REQUESTS" -> ApiException("محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.")
-        "ERROR_OPERATION_NOT_ALLOWED" -> ApiException("الدخول بالهاتف غير مفعّل بعد. تواصل مع الإدارة.")
+        "ERROR_OPERATION_NOT_ALLOWED" -> ApiException("الدخول بالهاتف غير متاح لهذا الرقم. تواصل مع الإدارة.")
         else -> ApiException("تعذّرت العملية. أعد المحاولة.")
     }
     else -> ApiException("تعذّرت العملية. تحقق من الاتصال وأعد المحاولة.")
 }
 
-suspend fun phoneSignUp(name: String, phone: String, password: String) {
+/** جلسة رمز مُرسَل: معرّف التحقق + رمز إعادة الإرسال */
+class PhoneCodeSession(val verificationId: String, val resendToken: PhoneAuthProvider.ForceResendingToken)
+
+/**
+ * يرسل رمز SMS إلى الرقم. يرجع جلسة الرمز، أو null إن سُجّل الدخول فورًا (تحقق تلقائي من الجهاز).
+ * مرّر [resend] لإعادة الإرسال.
+ */
+suspend fun phoneSendCode(activity: Activity, phone: String, name: String, resend: PhoneCodeSession? = null): PhoneCodeSession? {
     val n = normalizeSudanPhone(phone) ?: throw ApiException("رقم الهاتف غير صحيح.")
-    PendingSignup.name = name.trim()
-    try {
-        FirebaseAuth.getInstance().createUserWithEmailAndPassword(phoneEmail(n), password).await()
-    } catch (e: CancellationException) {
-        PendingSignup.name = null; throw e
-    } catch (e: Exception) {
-        PendingSignup.name = null; throw authError(e)
+    PendingSignup.name = name.trim().ifBlank { null }
+    val auth = FirebaseAuth.getInstance()
+    return suspendCancellableCoroutine<PhoneCodeSession?> { cont ->
+        val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+            override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                // تحقق تلقائي (قراءة الرمز أو تحقق فوري): ندخل مباشرة. قد يصل بعد onCodeSent فلا نستأنف مرتين.
+                auth.signInWithCredential(credential).addOnCompleteListener { t ->
+                    if (!cont.isActive) return@addOnCompleteListener
+                    if (t.isSuccessful) cont.resume(null)
+                    else cont.resumeWithException(authError(t.exception ?: Exception()))
+                }
+            }
+            override fun onVerificationFailed(e: FirebaseException) {
+                if (cont.isActive) cont.resumeWithException(authError(e))
+            }
+            override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
+                if (cont.isActive) cont.resume(PhoneCodeSession(verificationId, token))
+            }
+        }
+        val b = PhoneAuthOptions.newBuilder(auth)
+            .setPhoneNumber("+$n")
+            .setTimeout(60L, TimeUnit.SECONDS)
+            .setActivity(activity)
+            .setCallbacks(callbacks)
+        if (resend != null) b.setForceResendingToken(resend.resendToken)
+        PhoneAuthProvider.verifyPhoneNumber(b.build())
     }
 }
 
-suspend fun phoneSignIn(phone: String, password: String) {
-    val n = normalizeSudanPhone(phone) ?: throw ApiException("رقم الهاتف غير صحيح.")
-    PendingSignup.name = null
+/** يتحقق من الرمز ويسجّل الدخول */
+suspend fun phoneConfirmCode(session: PhoneCodeSession, code: String) {
     try {
-        FirebaseAuth.getInstance().signInWithEmailAndPassword(phoneEmail(n), password).await()
+        val cred = PhoneAuthProvider.getCredential(session.verificationId, code.trim())
+        FirebaseAuth.getInstance().signInWithCredential(cred).await()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -172,18 +207,20 @@ private fun AuthField(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PhoneSheet(onDismiss: () -> Unit) {
-    var signup by remember { mutableStateOf(true) }
+    val activity = LocalContext.current as Activity
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    var session by remember { mutableStateOf<PhoneCodeSession?>(null) }
+    var cooldown by remember { mutableIntStateOf(0) }
     val st = rememberAction()
-    val nameOk = name.trim().length >= 2
+    val resendSt = rememberAction()
     val phoneOk = normalizeSudanPhone(phone) != null
-    val passOk = password.length >= 8
-    val valid = phoneOk && passOk && (!signup || nameOk)
+
+    LaunchedEffect(cooldown) { if (cooldown > 0) { delay(1000); cooldown -= 1 } }
 
     ModalBottomSheet(
-        onDismissRequest = { if (!st.busy) onDismiss() },
+        onDismissRequest = { if (!st.busy && !resendSt.busy) onDismiss() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = Mq.Card,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -192,43 +229,49 @@ private fun PhoneSheet(onDismiss: () -> Unit) {
             Modifier.fillMaxWidth().imePadding().navigationBarsPadding()
                 .verticalScroll(rememberScrollState()).padding(horizontal = 22.dp).padding(bottom = 22.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                listOf(true to "إنشاء حساب", false to "تسجيل دخول").forEach { (isSignup, label) ->
-                    val on = signup == isSignup
-                    Column(Modifier.clickable { signup = isSignup; st.error = null }) {
-                        Text(
-                            label, fontSize = 16.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                            color = if (on) Mq.Green else Mq.Muted, modifier = Modifier.padding(bottom = 8.dp),
-                        )
-                        Box(Modifier.height(2.dp).fillMaxWidth().background(if (on) Mq.Green else Color.Transparent))
-                    }
+            val s = session
+            if (s == null) {
+                Text("الدخول برقم الهاتف", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Mq.Ink)
+                Text(
+                    "سنرسل رمز تحقق إلى جوالك. حساب جديد أو قديم، الخطوات نفسها.", color = Mq.Muted, fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                AuthField("الاسم (اختياري)", name, { name = it.take(80); st.error = null }, Icons.Default.Person)
+                AuthField(
+                    "رقم الهاتف", phone, { phone = it.take(20); st.error = null }, Icons.Default.Phone,
+                    keyboard = KeyboardType.Phone, ltr = true, prefix = "+249 ",
+                )
+                Spacer(Modifier.height(18.dp))
+                ActionButton("إرسال الرمز", Modifier.fillMaxWidth(), enabled = phoneOk, state = st) {
+                    val sent = phoneSendCode(activity, phone, name)
+                    if (sent != null) { session = sent; code = ""; cooldown = 60 }
                 }
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Mq.Line))
-            if (signup) AuthField("الاسم", name, { name = it.take(80); st.error = null }, Icons.Default.Person)
-            AuthField(
-                "رقم الهاتف", phone, { phone = it.take(20); st.error = null }, Icons.Default.Phone,
-                keyboard = KeyboardType.Phone, ltr = true, prefix = "+249 ",
-            )
-            AuthField("كلمة المرور", password, { password = it.take(64); st.error = null }, Icons.Default.Lock, password = true)
-            if (signup) {
+            } else {
+                Text("أدخل رمز التحقق", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Mq.Ink)
                 Text(
-                    "8 أحرف أو أرقام على الأقل", color = Mq.Muted, fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 6.dp, start = 4.dp),
+                    "أرسلنا رمزًا من 6 أرقام إلى +249 ${normalizeSudanPhone(phone)?.removePrefix("249").orEmpty()}",
+                    color = Mq.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp),
                 )
-            }
-            Spacer(Modifier.height(18.dp))
-            ActionButton(
-                if (signup) "إنشاء الحساب" else "تسجيل الدخول", Modifier.fillMaxWidth(),
-                enabled = valid, state = st,
-            ) {
-                if (signup) phoneSignUp(name, phone, password) else phoneSignIn(phone, password)
-            }
-            if (!signup) {
-                Text(
-                    "نسيت كلمة المرور؟ تواصل مع الإدارة لإعادة تعيينها.", color = Mq.Muted, fontSize = 12.sp,
-                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                AuthField(
+                    "رمز التحقق", code, { code = latinDigits(it).take(6); st.error = null }, Icons.Default.Lock,
+                    keyboard = KeyboardType.NumberPassword, ltr = true,
                 )
+                Spacer(Modifier.height(18.dp))
+                ActionButton("تأكيد", Modifier.fillMaxWidth(), enabled = code.length == 6, state = st) {
+                    phoneConfirmCode(s, code)
+                }
+                Spacer(Modifier.height(10.dp))
+                ActionButton(
+                    if (cooldown > 0) "إعادة الإرسال بعد $cooldown ثانية" else "إعادة إرسال الرمز",
+                    Modifier.fillMaxWidth(), enabled = cooldown == 0, tonal = true, state = resendSt,
+                ) {
+                    val sent = phoneSendCode(activity, phone, name, s)
+                    if (sent != null) { session = sent; code = ""; cooldown = 60 }
+                }
+                TextButton(
+                    onClick = { session = null; code = ""; st.error = null; resendSt.error = null },
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) { Text("تغيير الرقم") }
             }
         }
     }

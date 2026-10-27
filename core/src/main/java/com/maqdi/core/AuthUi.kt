@@ -107,20 +107,38 @@ fun isPhoneAccountEmail(email: String) = email.isBlank() || email.endsWith("@$LE
 fun phoneFromAccountEmail(email: String): String? =
     if (email.endsWith("@$LEGACY_PHONE_EMAIL_DOMAIN")) "+" + email.substringBefore('@') else null
 
-private fun authError(e: Exception): ApiException = when (e) {
-    is FirebaseNetworkException -> ApiException("تعذّر الاتصال. تحقق من الإنترنت وأعد المحاولة.")
-    is FirebaseTooManyRequestsException -> ApiException("محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.")
-    is FirebaseAuthException -> when (e.errorCode) {
-        "ERROR_INVALID_VERIFICATION_CODE" -> ApiException("الرمز غير صحيح.")
-        "ERROR_SESSION_EXPIRED" -> ApiException("انتهت صلاحية الرمز. اطلب رمزًا جديدًا.")
-        "ERROR_INVALID_PHONE_NUMBER" -> ApiException("رقم الهاتف غير صحيح.")
-        "ERROR_QUOTA_EXCEEDED" -> ApiException("تعذّر إرسال الرمز الآن. حاول لاحقًا.")
-        "ERROR_USER_DISABLED" -> ApiException("هذا الحساب معطّل. تواصل مع الإدارة.")
-        "ERROR_TOO_MANY_REQUESTS" -> ApiException("محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.")
-        "ERROR_OPERATION_NOT_ALLOWED" -> ApiException("الدخول بالهاتف غير متاح لهذا الرقم. تواصل مع الإدارة.")
-        else -> ApiException("تعذّرت العملية. أعد المحاولة.")
+/** السطر التقني الذي يُلحق بكل خطأ دخول: نوع الاستثناء والرمز والنص الأصلي من Firebase، ليُعرف السبب بالضبط */
+private fun techDetail(e: Exception): String {
+    val code = (e as? FirebaseAuthException)?.errorCode
+    val msg = e.message?.take(300)
+    return "\u2066[" + listOfNotNull(e.javaClass.simpleName, code, msg).joinToString(" | ") + "]\u2069"
+}
+
+private fun authError(e: Exception): ApiException {
+    val text = when (e) {
+        is FirebaseNetworkException -> "تعذّر الاتصال. تحقق من الإنترنت وأعد المحاولة."
+        is FirebaseTooManyRequestsException -> "محاولات كثيرة من هذا الجهاز أو الرقم. انتظر قليلًا ثم أعد المحاولة."
+        is FirebaseAuthException -> when (e.errorCode) {
+            "ERROR_INVALID_VERIFICATION_CODE" -> "الرمز غير صحيح."
+            "ERROR_SESSION_EXPIRED" -> "انتهت صلاحية الرمز. اطلب رمزًا جديدًا."
+            "ERROR_INVALID_PHONE_NUMBER" -> "رقم الهاتف غير صحيح."
+            "ERROR_QUOTA_EXCEEDED" -> "تجاوز المشروع حصة الرسائل. حاول لاحقًا أو تواصل مع الإدارة."
+            "ERROR_USER_DISABLED" -> "هذا الحساب معطّل. تواصل مع الإدارة."
+            "ERROR_TOO_MANY_REQUESTS" -> "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة."
+            "ERROR_OPERATION_NOT_ALLOWED" -> "الدخول بالهاتف غير مفعّل في Firebase، أو منطقة هذا الرقم غير مسموحة في سياسة SMS."
+            "ERROR_APP_NOT_AUTHORIZED" -> "التطبيق غير مصرَّح له: تحقق من بصمات SHA-1/SHA-256 وملف google-services.json."
+            else -> "تعذّر إرسال الرمز أو التحقق منه."
+        }
+        else -> when {
+            // أخطاء Firebase غير الموثَّقة بكود (مثل فشل بصمة التطبيق أو Play Integrity/reCAPTCHA) تظهر برسالتها الأصلية
+            e.message?.contains("not authorized", true) == true || e.message?.contains("INVALID_APP_CREDENTIAL", true) == true ->
+                "التطبيق غير مصرَّح له باستخدام Firebase Authentication: تحقق من بصمات SHA-1/SHA-256 وملف google-services.json."
+            e.message?.contains("integrity", true) == true || e.message?.contains("recaptcha", true) == true ->
+                "فشل التحقق من التطبيق (Play Integrity/reCAPTCHA). تحقق من تفعيل Play Integrity API وبصمة SHA-256."
+            else -> "تعذّرت العملية."
+        }
     }
-    else -> ApiException("تعذّرت العملية. تحقق من الاتصال وأعد المحاولة.")
+    return ApiException(text + "\n" + techDetail(e), (e as? FirebaseAuthException)?.errorCode)
 }
 
 /** جلسة رمز مُرسَل: معرّف التحقق + رمز إعادة الإرسال */
@@ -239,7 +257,7 @@ private fun PhoneSheet(onDismiss: () -> Unit) {
                 AuthField("الاسم (اختياري)", name, { name = it.take(80); st.error = null }, Icons.Default.Person)
                 AuthField(
                     "رقم الهاتف", phone, { phone = it.take(20); st.error = null }, Icons.Default.Phone,
-                    keyboard = KeyboardType.Phone, ltr = true, prefix = "+249 ",
+                    keyboard = KeyboardType.Phone, ltr = true, prefix = "\u2066+249\u2069 ",
                 )
                 Spacer(Modifier.height(18.dp))
                 ActionButton("إرسال الرمز", Modifier.fillMaxWidth(), enabled = phoneOk, state = st) {
@@ -249,7 +267,7 @@ private fun PhoneSheet(onDismiss: () -> Unit) {
             } else {
                 Text("أدخل رمز التحقق", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Mq.Ink)
                 Text(
-                    "أرسلنا رمزًا من 6 أرقام إلى +249 ${normalizeSudanPhone(phone)?.removePrefix("249").orEmpty()}",
+                    "أرسلنا رمزًا من 6 أرقام إلى \u2066+249 ${normalizeSudanPhone(phone)?.removePrefix("249").orEmpty()}\u2069",
                     color = Mq.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp),
                 )
                 AuthField(

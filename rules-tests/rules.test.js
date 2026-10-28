@@ -115,17 +115,6 @@ test("المستخدم لا يغيّر دوره أو حالته", async () => {
   await assertFails(setDoc(doc(as("c1"), "users/newuser"), { role: "admin", status: "active" }));
 });
 
-// حساب الهاتف الموثَّق: لا يستطيع تغيير رقمه (رقم التوكن هو المرجع)
-test("حساب الهاتف الموثَّق لا يغيّر رقمه", async () => {
-  await env.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), "users/ph1"), { role: "customer", status: "active", name: "هاتف", phone: "+249912345678", fcmTokens: [] });
-  });
-  const ph = env.authenticatedContext("ph1", { phone_number: "+249912345678" }).firestore();
-  await assertSucceeds(updateDoc(doc(ph, "users/ph1"), { name: "اسم جديد" }));
-  await assertFails(updateDoc(doc(ph, "users/ph1"), { phone: "+966512345678" }));
-  await assertFails(updateDoc(doc(ph, "users/ph1"), { phone: null }));
-});
-
 // 10) الحساب الموقوف لا ينفذ عمليات
 test("الحساب الموقوف لا يقرأ ولا يعدّل", async () => {
   await assertFails(getDoc(doc(as("sus"), "stores/s1")));

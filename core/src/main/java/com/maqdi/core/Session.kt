@@ -99,7 +99,7 @@ class SessionViewModel : ViewModel() {
                     } else if (!ensureTried) {
                         ensureTried = true
                         _state.value = SessionState.Loading
-                        Api.ensureProfile(name ?: PendingSignup.name) // يُنشئ الملف؛ اللقطة التالية تحمله
+                        Api.ensureProfile(name) // يُنشئ الملف؛ اللقطة التالية تحمله
                     }
                     // p == null بعد المحاولة: نبقى في التحميل بانتظار اللقطة التالية
                 }

@@ -32,9 +32,6 @@ service cloud.firestore {
         && request.resource.data.name is string && request.resource.data.name.size() <= 80
         && (request.resource.data.phone == null
             || (request.resource.data.phone is string && request.resource.data.phone.size() <= 20))
-        // حساب الهاتف الموثَّق برمز SMS: رقمه ثابت ولا يُغيَّر من العميل
-        && (!('phone_number' in request.auth.token)
-            || request.resource.data.get('phone', null) == request.auth.token.phone_number)
         && request.resource.data.fcmTokens is list && request.resource.data.fcmTokens.size() <= 10;
       allow create, delete: if false;
 

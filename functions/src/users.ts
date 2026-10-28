@@ -1,26 +1,16 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { allPermissions, effectivePermissions, isSubset, validatePermissionList } from "./permissions";
-import { phoneFromToken } from "./authLogic";
 import { callable, db, email, int, bool, obj, oneOf, optStr, str, docId, loadActor, writeAudit } from "./util";
 
-// تُستدعى بعد أول تسجيل دخول لإنشاء الملف الشخصي (هاتف برمز SMS، أو Google).
+// تُستدعى بعد أول تسجيل دخول بـ Google لإنشاء الملف الشخصي.
 // الدور يُحدَّد من الخادم فقط: كل حساب جديد زبون؛ يرفعه المدير لاحقًا من شاشة المستخدمين.
 export const ensureProfile = callable(async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "login_required");
   const token = req.auth.token as Record<string, unknown>;
-  const fb = token.firebase as { sign_in_provider?: string } | undefined;
-  let mail = "";
-  let phone: string | null = null;
-  if (fb?.sign_in_provider === "phone") {
-    // الرقم هنا موثَّق برمز SMS من Firebase. الدول المقبولة يحددها Firebase (SMS region policy)
-    phone = phoneFromToken(token.phone_number);
-    if (!phone) throw new HttpsError("permission-denied", "phone_invalid");
-  } else {
-    // غير الهاتف: لا يُقبل إلا بريد موثَّق (Google). لا حسابات بريد/كلمة مرور بلا توثيق.
-    if (typeof token.email !== "string" || token.email_verified !== true) throw new HttpsError("permission-denied", "email_not_verified");
-    mail = token.email.toLowerCase();
-  }
+  // لا يُقبل إلا بريد موثَّق (Google)
+  if (typeof token.email !== "string" || token.email_verified !== true) throw new HttpsError("permission-denied", "email_not_verified");
+  const mail = token.email.toLowerCase();
   const d = obj(req.data);
   const name = optStr(d.name, "name", 80) ?? (typeof token.name === "string" ? token.name.slice(0, 80) : "");
 
@@ -29,7 +19,7 @@ export const ensureProfile = callable(async (req) => {
     const u = await tx.get(uref);
     if (u.exists) return { role: u.get("role"), status: u.get("status"), storeId: u.get("storeId") ?? null };
     const now = Timestamp.now();
-    tx.create(uref, { email: mail, name, phone, role: "customer", storeId: null, permissions: null, status: "active", isTestAccount: false, savedAddress: null, fcmTokens: [], createdAt: now, updatedAt: now });
+    tx.create(uref, { email: mail, name, phone: null, role: "customer", storeId: null, permissions: null, status: "active", isTestAccount: false, savedAddress: null, fcmTokens: [], createdAt: now, updatedAt: now });
     return { role: "customer", status: "active", storeId: null };
   });
 });

@@ -30,6 +30,7 @@ dependencies {
 
     api(platform("com.google.firebase:firebase-bom:33.3.0"))
     api("com.google.firebase:firebase-auth")
+    api("com.google.android.gms:play-services-base:18.5.0") // SignInButton الرسمي من Google
     api("com.google.firebase:firebase-firestore")
     api("com.google.firebase:firebase-functions")
     api("com.google.firebase:firebase-storage")

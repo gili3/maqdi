@@ -3,8 +3,9 @@
 ## ما تغيّر
 - الدخول بالهاتف صار **Firebase Phone Auth**: يكتب المستخدم رقمه فيصله رمز من 6 أرقام ويؤكده. لا كلمة مرور ولا بريد داخلي.
   الرقم موثَّق الملكية، فلا يستطيع أحد تسجيل رقم غيره، وتُحلّ مشكلة «نسيت كلمة المرور».
-- الخادم (`ensureProfile`) يقرأ الرقم من توكن Firebase نفسه ويقبل **+249 فقط** (`phone_country_not_allowed` لغير ذلك).
-  هذا الفحص هو الحاسم؛ فحص التطبيق وإعداد Firebase للمناطق لا يكفيان وحدهما.
+- **قائمة دول مثل واتساب** (علم + اسم عربي + مفتاح، مع بحث؛ السودان أولًا ومختار افتراضيًا). الرقم يُرسَل بصيغة E.164.
+- الخادم (`ensureProfile`) يقرأ الرقم من توكن Firebase نفسه ويتحقق من صيغة E.164 (`phone_invalid` لغير ذلك).
+  الدول المقبولة فعليًا يحددها **Firebase SMS region policy** (Authentication ← Settings)، وليس الكود.
 - لم يعد الخادم ينشئ ملفًا لأي حساب ببريد وكلمة مرور غير موثَّق. (Google ما زال يعمل.)
 - قواعد Firestore: حساب الهاتف لا يستطيع تعديل رقمه.
 - الحسابات القديمة ببريد `…@phone.maqdi.app` ما زالت تعمل (ملفها موجود) ويُعرض رقمها كما كان.
@@ -12,7 +13,8 @@
 
 ## خطوات واجبة في Firebase (مرة واحدة)
 1. Authentication ← Sign-in method ← فعّل **Phone**.
-2. Authentication ← Settings ← **SMS region policy** ← Allow ← أضف **السودان** فقط.
+2. Authentication ← Settings ← **SMS region policy** ← Allow ← أضف الدول التي تريد قبولها (السودان على الأقل).
+   كل دولة تضيفها تفتح الباب لرسائل مكلفة وللاحتيال (SMS pumping): أضف ما تحتاجه فقط.
 3. Project settings ← تطبيقات الأندرويد ← أضف **SHA-1 و SHA-256** لكل تطبيق (debug وrelease وPlay App Signing)
    ثم نزّل `google-services.json` الجديد وضعه في `app-customer` و`app-partner` (والجذر إن لزم).
 4. فعّل **Play Integrity API** في Google Cloud للمشروع (أو يعمل reCAPTCHA احتياطًا).

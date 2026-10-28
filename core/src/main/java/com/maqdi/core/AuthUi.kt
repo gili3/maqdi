@@ -3,7 +3,10 @@ package com.maqdi.core
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
@@ -37,6 +41,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -45,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
@@ -89,13 +96,21 @@ private fun latinDigits(raw: String): String = buildString {
     }
 }
 
-/** يرجع الرقم بصيغة 249XXXXXXXXX (جوال سوداني: 9 أرقام تبدأ بـ 9 أو 1)، أو null إن كان غير صالح */
-fun normalizeSudanPhone(raw: String): String? {
-    var d = latinDigits(raw)
-    if (d.startsWith("00249")) d = d.removePrefix("00")
-    if (d.startsWith("249")) d = d.removePrefix("249")
+/**
+ * يرجع الرقم بصيغة E.164 (+مفتاح الدولة ثم الرقم)، أو null إن كان غير صالح.
+ * السودان: 9 أرقام تبدأ بـ 9 أو 1. غيره: 6 إلى 12 رقمًا (والتحقق النهائي عند Firebase).
+ * يُقبل الرقم بصفر محلي في أوله، أو بصيغة دولية (+ أو 00) فيُحذف مفتاح الدولة المكرر.
+ */
+fun normalizePhone(country: Country, raw: String): String? {
+    val t = raw.trim()
+    var d = latinDigits(t)
+    val intl = t.startsWith("+") || d.startsWith("00")
+    if (d.startsWith("00")) d = d.drop(2)
+    if ((intl || (country.iso == "SD" && d.length == 12)) && d.startsWith(country.dial)) d = d.removePrefix(country.dial)
     d = d.removePrefix("0")
-    return if (d.length == 9 && (d[0] == '9' || d[0] == '1')) "249$d" else null
+    val ok = if (country.iso == "SD") d.length == 9 && (d[0] == '9' || d[0] == '1')
+    else d.length in 6..12 && country.dial.length + d.length <= 15
+    return if (ok) "+${country.dial}$d" else null
 }
 
 // حسابات قديمة أُنشئت ببريد داخلي (قبل الدخول برمز SMS): تبقى تعمل ويُعرض رقمها
@@ -148,8 +163,8 @@ class PhoneCodeSession(val verificationId: String, val resendToken: PhoneAuthPro
  * يرسل رمز SMS إلى الرقم. يرجع جلسة الرمز، أو null إن سُجّل الدخول فورًا (تحقق تلقائي من الجهاز).
  * مرّر [resend] لإعادة الإرسال.
  */
-suspend fun phoneSendCode(activity: Activity, phone: String, name: String, resend: PhoneCodeSession? = null): PhoneCodeSession? {
-    val n = normalizeSudanPhone(phone) ?: throw ApiException("رقم الهاتف غير صحيح.")
+suspend fun phoneSendCode(activity: Activity, country: Country, phone: String, name: String, resend: PhoneCodeSession? = null): PhoneCodeSession? {
+    val n = normalizePhone(country, phone) ?: throw ApiException("رقم الهاتف غير صحيح.")
     PendingSignup.name = name.trim().ifBlank { null }
     val auth = FirebaseAuth.getInstance()
     return suspendCancellableCoroutine<PhoneCodeSession?> { cont ->
@@ -170,7 +185,7 @@ suspend fun phoneSendCode(activity: Activity, phone: String, name: String, resen
             }
         }
         val b = PhoneAuthOptions.newBuilder(auth)
-            .setPhoneNumber("+$n")
+            .setPhoneNumber(n)
             .setTimeout(60L, TimeUnit.SECONDS)
             .setActivity(activity)
             .setCallbacks(callbacks)
@@ -222,20 +237,68 @@ private fun AuthField(
     )
 }
 
+/** نافذة اختيار الدولة: بحث بالاسم أو المفتاح، السودان أولًا */
+@Composable
+private fun CountryPickerDialog(selected: Country, onPick: (Country) -> Unit, onDismiss: () -> Unit) {
+    var q by remember { mutableStateOf("") }
+    val shown = remember(q) {
+        val k = q.trim().removePrefix("+").lowercase()
+        if (k.isEmpty()) COUNTRIES else COUNTRIES.filter { it.name.contains(k) || it.dial.startsWith(latinDigits(k)) && latinDigits(k).isNotEmpty() || it.iso.lowercase() == k }
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = Mq.Card) {
+            Column(Modifier.fillMaxWidth().height(520.dp).padding(16.dp)) {
+                Text("اختر الدولة", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Mq.Ink)
+                OutlinedTextField(
+                    value = q, onValueChange = { q = it.take(30) }, singleLine = true, label = { Text("ابحث بالاسم أو المفتاح") },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), shape = RoundedCornerShape(14.dp),
+                )
+                if (shown.isEmpty()) {
+                    Text("لا نتائج.", color = Mq.Muted, modifier = Modifier.padding(8.dp))
+                } else {
+                    LazyColumn(Modifier.weight(1f)) {
+                        items(shown, key = { it.iso }) { c ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { onPick(c) }.padding(vertical = 12.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(c.flag, fontSize = 22.sp)
+                                Spacer(Modifier.size(12.dp))
+                                Text(
+                                    c.name, modifier = Modifier.weight(1f), fontSize = 15.sp,
+                                    fontWeight = if (c.iso == selected.iso) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (c.iso == selected.iso) Mq.Green else Mq.Ink,
+                                )
+                                Text("\u2066+${c.dial}\u2069", color = Mq.Muted, fontSize = 14.sp)
+                            }
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(Mq.Line))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PhoneSheet(onDismiss: () -> Unit) {
     val activity = LocalContext.current as Activity
     var name by remember { mutableStateOf("") }
+    var iso by rememberSaveable { mutableStateOf(DEFAULT_COUNTRY.iso) }
+    val country = COUNTRIES.firstOrNull { it.iso == iso } ?: DEFAULT_COUNTRY
+    var pickCountry by remember { mutableStateOf(false) }
     var phone by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var session by remember { mutableStateOf<PhoneCodeSession?>(null) }
     var cooldown by remember { mutableIntStateOf(0) }
     val st = rememberAction()
     val resendSt = rememberAction()
-    val phoneOk = normalizeSudanPhone(phone) != null
+    val full = normalizePhone(country, phone)
 
     LaunchedEffect(cooldown) { if (cooldown > 0) { delay(1000); cooldown -= 1 } }
+
+    if (pickCountry) CountryPickerDialog(country, onPick = { iso = it.iso; pickCountry = false; st.error = null }, onDismiss = { pickCountry = false })
 
     ModalBottomSheet(
         onDismissRequest = { if (!st.busy && !resendSt.busy) onDismiss() },
@@ -251,23 +314,38 @@ private fun PhoneSheet(onDismiss: () -> Unit) {
             if (s == null) {
                 Text("الدخول برقم الهاتف", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Mq.Ink)
                 Text(
-                    "سنرسل رمز تحقق إلى جوالك. حساب جديد أو قديم، الخطوات نفسها.", color = Mq.Muted, fontSize = 13.sp,
+                    "اختر دولتك واكتب رقمك، وسنرسل رمز تحقق إلى جوالك.", color = Mq.Muted, fontSize = 13.sp,
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 AuthField("الاسم (اختياري)", name, { name = it.take(80); st.error = null }, Icons.Default.Person)
+                // اختيار الدولة (مثل واتساب)
+                val shape = RoundedCornerShape(14.dp)
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 12.dp).background(Mq.Card, shape)
+                        .border(BorderStroke(1.dp, Mq.Muted.copy(alpha = 0.45f)), shape)
+                        .clickable { pickCountry = true }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(country.flag, fontSize = 22.sp)
+                    Spacer(Modifier.size(12.dp))
+                    Text(country.name, modifier = Modifier.weight(1f), fontSize = 15.sp, color = Mq.Ink)
+                    Text("\u2066+${country.dial}\u2069", color = Mq.Muted, fontSize = 14.sp)
+                    Spacer(Modifier.size(6.dp))
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "تغيير الدولة", tint = Mq.Muted)
+                }
                 AuthField(
                     "رقم الهاتف", phone, { phone = it.take(20); st.error = null }, Icons.Default.Phone,
-                    keyboard = KeyboardType.Phone, ltr = true, prefix = "\u2066+249\u2069 ",
+                    keyboard = KeyboardType.Phone, ltr = true, prefix = "\u2066+${country.dial}\u2069 ",
                 )
                 Spacer(Modifier.height(18.dp))
-                ActionButton("إرسال الرمز", Modifier.fillMaxWidth(), enabled = phoneOk, state = st) {
-                    val sent = phoneSendCode(activity, phone, name)
+                ActionButton("إرسال الرمز", Modifier.fillMaxWidth(), enabled = full != null, state = st) {
+                    val sent = phoneSendCode(activity, country, phone, name)
                     if (sent != null) { session = sent; code = ""; cooldown = 60 }
                 }
             } else {
                 Text("أدخل رمز التحقق", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Mq.Ink)
                 Text(
-                    "أرسلنا رمزًا من 6 أرقام إلى \u2066+249 ${normalizeSudanPhone(phone)?.removePrefix("249").orEmpty()}\u2069",
+                    "أرسلنا رمزًا من 6 أرقام إلى \u2066${full.orEmpty()}\u2069",
                     color = Mq.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp),
                 )
                 AuthField(
@@ -283,7 +361,7 @@ private fun PhoneSheet(onDismiss: () -> Unit) {
                     if (cooldown > 0) "إعادة الإرسال بعد $cooldown ثانية" else "إعادة إرسال الرمز",
                     Modifier.fillMaxWidth(), enabled = cooldown == 0, tonal = true, state = resendSt,
                 ) {
-                    val sent = phoneSendCode(activity, phone, name, s)
+                    val sent = phoneSendCode(activity, country, phone, name, s)
                     if (sent != null) { session = sent; code = ""; cooldown = 60 }
                 }
                 TextButton(

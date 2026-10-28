@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { allPermissions, effectivePermissions, isSubset, validatePermissionList } from "./permissions";
-import { sudanPhoneFromToken } from "./authLogic";
+import { phoneFromToken } from "./authLogic";
 import { callable, db, email, int, bool, obj, oneOf, optStr, str, docId, loadActor, writeAudit } from "./util";
 
 // تُستدعى بعد أول تسجيل دخول لإنشاء الملف الشخصي (هاتف برمز SMS، أو Google).
@@ -13,9 +13,9 @@ export const ensureProfile = callable(async (req) => {
   let mail = "";
   let phone: string | null = null;
   if (fb?.sign_in_provider === "phone") {
-    // الرقم هنا موثَّق برمز SMS. يُقبل السوداني فقط (إعداد Firebase وحده لا يكفي؛ هذا الفحص هو الحاسم)
-    phone = sudanPhoneFromToken(token.phone_number);
-    if (!phone) throw new HttpsError("permission-denied", "phone_country_not_allowed");
+    // الرقم هنا موثَّق برمز SMS من Firebase. الدول المقبولة يحددها Firebase (SMS region policy)
+    phone = phoneFromToken(token.phone_number);
+    if (!phone) throw new HttpsError("permission-denied", "phone_invalid");
   } else {
     // غير الهاتف: لا يُقبل إلا بريد موثَّق (Google). لا حسابات بريد/كلمة مرور بلا توثيق.
     if (typeof token.email !== "string" || token.email_verified !== true) throw new HttpsError("permission-denied", "email_not_verified");
